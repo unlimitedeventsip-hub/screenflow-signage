@@ -1,3 +1,41 @@
+## Screenflow TV 2.0 — asociere automată (TCL Android TV)
+
+**Actualizare:** aplicația TCL v2 intră direct la `/connect` în loc să solicite un link `/play/UUID`.
+Fiecare televizor creează un identificator de instalare și un secret aleatoriu păstrat numai pe dispozitiv.
+Codul din 6 cifre apare pe TV, iar în panoul de administrare la **Televizoare** apare automat
+cererea de asociere. Administratorul verifică vizual codul, numește aparatul, alege locația
+și playlistul și confirmă. Sistemul creează automat intrarea `screens`, iar TV-ul
+este redirecționat automat către playlist.
+
+**Activare obligatorie înainte de instalarea APK-ului v2:**
+1. În Supabase SQL Editor din proiectul Screenflow existent, rulează complet
+   [upgrade_v2_auto_pair.sql](./supabase/upgrade_v2_auto_pair.sql).
+   Este o migrare nedistructivă: păstrează reclamele, playlisturile și televizoarele existente.
+2. Verifică administrarea pe `/admin` și, pentru testul din browser, deschide `/connect`.
+3. Instalează APK-ul v2 `app-debug.apk` de la GitHub Actions pe TCL prin
+   `adb install -r app-debug.apk`. Păstrează același package name `ro.screenflow.tv`.
+4. Pe TV va fi afișat un cod de 6 cifre; din **Televizoare** confirmă acel cod
+   și selectează o locație și playlistul. TV-ul reia automat redarea.
+5. Pentru **5 TV-uri Unirii**, instalează aceeași aplicație pe fiecare, aprobă separat
+   cele cinci coduri, selectează aceeași locație, apoi folosește
+   **Playlist comun pentru locație**.
+6. În **Playlisturi**, poți activa opțional **Sincronizează TV-urile**. Redarea
+   se aliniază aproximativ la un ceas comun, dar nu este frame-perfect; TV-urile
+   pot avea diferențe de buffering și randare. Pentru videoclipuri, configurează
+   durata cât mai aproape de durata reală.
+   
+**Stare live:** panoul numără doar aplicațiile aprobate care au trimis heartbeat în
+ultimele ~45 secunde. Un TV „online” înseamnă ultimul semnal recent, nu dovada
+vizuală că monitorul afișează o reclamă. Aparatele neasociate apar separat la
+„TV de asociat”. Statusul este reîmprospătat la ~15 secunde.
+
+**Atenție la mutarea Cloudflare:** APK-ul v2 curent folosește încă
+`screenflowum.netlify.app`. După publicarea noului hostname Cloudflare Pages,
+hostul trebuie actualizat în codul Android și APK-ul recompilat. Nu opri
+Netlify până când noua aplicație a fost verificată pe TCL.
+
+---
+
 ## Hosting principal: Cloudflare Pages
 
 Screenflow se mută de pe Netlify pe Cloudflare Pages. Configurarea completă și
