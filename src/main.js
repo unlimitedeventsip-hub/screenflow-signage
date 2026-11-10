@@ -140,7 +140,7 @@ async function startAdmin() {
     const items=state.items.filter(i=>i.playlist_id===playlist?.id).sort((a,b)=>a.position-b.position || a.created_at.localeCompare(b.created_at));
     const addable=state.assets.filter(a=>!items.some(i=>i.asset_id===a.id));
     return heading('ORGANIZARE','Playlisturi','Fiecare televizor poate avea playlistul lui. Ordinea este modificabilă oricând.')+`<div class="playlist-layout"><section class="panel playlist-list"><div class="panel-head"><h2>Playlisturile mele</h2></div><form data-form="playlist-new" class="stack-form"><input name="name" placeholder="Ex.: Promo ParkLake" required maxlength="100"><button class="btn primary" type="submit">${icon('plus',16)} Creează</button></form><div class="playlist-menu">${state.playlists.map(p=>`<button class="playlist-option ${state.selectedPlaylist===p.id?'selected':''}" data-action="select-playlist" data-id="${p.id}"><span>${icon('list',18)}</span><div><strong>${safe(p.name)}</strong><small>${state.items.filter(i=>i.playlist_id===p.id).length} materiale</small></div>${icon('arrow',16)}</button>`).join('')}</div></section>
-    <section class="panel playlist-editor">${playlist?`<div class="panel-head"><div><div class="kicker">EDITARE PLAYLIST</div><h2>${safe(playlist.name)}</h2></div><button class="icon-button danger" title="Șterge playlist" data-action="delete-playlist" data-id="${playlist.id}">${icon('trash',18)}</button></div><form data-form="playlist-add" class="add-form"><select name="asset_id" required><option value="">Alege reclamă...</option>${addable.map(a=>`<option value="${a.id}">${safe(a.title)} (${a.kind})</option>`).join('')}</select><button class="btn primary" type="submit" ${!addable.length?'disabled':''}>${icon('plus',17)} Adaugă</button></form><div class="sortable-list">${items.length?items.map((item,index)=>{const a=state.assets.find(a=>a.id===item.asset_id);return `<div class="sequence-item"><span class="sequence-no">${String(index+1).padStart(2,'0')}</span><span class="sequence-thumbnail">${a?.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt="">`:icon('play',18)}</span><div class="sequence-info"><strong>${safe(a?.title||'Material șters')}</strong><small>${a?.kind==='video'?'Video · până la final':'Imagine · '+(item.duration_override||a?.duration_seconds||10)+' sec'}</small></div><div class="sequence-actions"><button type="button" class="icon-button" title="Mută sus" data-action="item-up" data-id="${item.id}" ${index===0?'disabled':''}>${icon('up',17)}</button><button type="button" class="icon-button" title="Mută jos" data-action="item-down" data-id="${item.id}" ${index===items.length-1?'disabled':''}>${icon('down',17)}</button><button type="button" class="icon-button danger" title="Elimină" data-action="item-remove" data-id="${item.id}">${icon('trash',17)}</button></div></div>`;}).join(''):empty('list','Playlist gol','Alege reclame din lista de mai sus.')}</div>`:empty('list','Selectează un playlist','Creează sau alege un playlist din stânga.')}</section></div>`;
+    <section class="panel playlist-editor">${playlist?`<div class="panel-head"><div><div class="kicker">EDITARE PLAYLIST</div><h2>${safe(playlist.name)}</h2><button type="button" class="btn small ${playlist.synchronized?'primary':'subtle'}" data-action="sync-toggle" data-id="${playlist.id}">${playlist.synchronized?'Sincronizare activă':'Sincronizează TV-urile'}</button></div><button class="icon-button danger" title="Șterge playlist" data-action="delete-playlist" data-id="${playlist.id}">${icon('trash',18)}</button></div><form data-form="playlist-add" class="add-form"><select name="asset_id" required><option value="">Alege reclamă...</option>${addable.map(a=>`<option value="${a.id}">${safe(a.title)} (${a.kind})</option>`).join('')}</select><button class="btn primary" type="submit" ${!addable.length?'disabled':''}>${icon('plus',17)} Adaugă</button></form><div class="sortable-list">${items.length?items.map((item,index)=>{const a=state.assets.find(a=>a.id===item.asset_id);return `<div class="sequence-item"><span class="sequence-no">${String(index+1).padStart(2,'0')}</span><span class="sequence-thumbnail">${a?.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt="">`:icon('play',18)}</span><div class="sequence-info"><strong>${safe(a?.title||'Material șters')}</strong><small>${a?.kind==='video'?'Video · până la final':'Imagine · '+(item.duration_override||a?.duration_seconds||10)+' sec'}</small></div><div class="sequence-actions"><button type="button" class="icon-button" title="Mută sus" data-action="item-up" data-id="${item.id}" ${index===0?'disabled':''}>${icon('up',17)}</button><button type="button" class="icon-button" title="Mută jos" data-action="item-down" data-id="${item.id}" ${index===items.length-1?'disabled':''}>${icon('down',17)}</button><button type="button" class="icon-button danger" title="Elimină" data-action="item-remove" data-id="${item.id}">${icon('trash',17)}</button></div></div>`;}).join(''):empty('list','Playlist gol','Alege reclame din lista de mai sus.')}</div>`:empty('list','Selectează un playlist','Creează sau alege un playlist din stânga.')}</section></div>`;
   }
   function screensView(){
     const rows=state.screens.map(s=>{const l=state.locations.find(l=>l.id===s.location_id);const p=state.playlists.find(p=>p.id===s.playlist_id);const link=`${location.origin}/play/${s.public_id}`;return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><select name="location">${selectOptions(state.locations,s.location_id,'Fără locație')}</select><button type="submit" class="btn small subtle">Actualizează</button></form>${screenInfo(s)}<div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
@@ -162,6 +162,11 @@ async function startAdmin() {
     if(a==='dismiss-error'){state.error='';render();return;}
     if(a==='logout'){await supabase.auth.signOut();state.session=null;state.isAdmin=false;render();return;}
     if(a==='select-playlist'){state.selectedPlaylist=id;render();return;}
+    if(a==='sync-toggle'){
+      const p=state.playlists.find(x=>x.id===id);if(!p)return;
+      perform(()=>patch('playlists',id,{synchronized:!p.synchronized,sync_anchor:new Date().toISOString()}),
+        p.synchronized?'Sincronizare oprită.':'TV-urile cu acest playlist sunt sincronizate.');return;
+    }
     if(a==='copy-link'){const s=state.screens.find(s=>s.id===id); if(!s)return;const value=`${location.origin}/play/${s.public_id}`;try{await navigator.clipboard.writeText(value);toast('Linkul TV a fost copiat.');}catch{window.prompt('Copiază linkul:',value);}return;}
     if(a==='toggle-asset'){const o=state.assets.find(x=>x.id===id);if(o)perform(()=>patch('assets',id,{enabled:!o.enabled}),'Starea reclamei a fost schimbată.');return;}
     if(['delete-asset','delete-playlist','delete-screen','delete-location'].includes(a)){
@@ -235,17 +240,34 @@ function startPlayer(){
   document.title='Screenflow · TV Player';
   root.innerHTML=`<div class="tv-stage" id="tv-stage"><div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>Se pregătește conținutul...</p></div></div><div class="tv-indicator" id="tv-indicator"></div>`;
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
-  let current=[], pending=null, index=0, first=true, timer=null, token=0;
+  let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="";
   const cacheKey=`screenflow:manifest:${publicId}`;
   const getUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const standby=(msg='Conținutul va apărea în curând.')=>{stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
+  const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
   const next=()=>{
     clearTimeout(timer);token++;
+    if(sync){align();return;}
     if(pending){current=pending;pending=null;index=0;}
     else index=(index+1)%Math.max(current.length,1);
     play();
   };
-  function play(){
+  function align(force=false){
+    if(!sync||!current.length)return;
+    const length=current.reduce((sum,a)=>sum+duration(a),0);
+    if(!length)return;
+    let t=((Date.now()+syncOffset-syncAnchor)%length+length)%length;
+    let wanted=0;
+    while(wanted<current.length-1 && t>=duration(current[wanted])){t-=duration(current[wanted]);wanted++;}
+    const remain=Math.max(300,duration(current[wanted])-t);
+    if(force||index!==wanted||!stage.querySelector('.tv-media')){index=wanted;play(t,remain);return;}
+    const v=stage.querySelector('video');
+    if(v && v.readyState>=1 && Number.isFinite(v.duration) && Math.abs(v.currentTime-t/1000)>1.5){
+      try{v.currentTime=Math.min(t/1000,Math.max(0,v.duration-0.1));}catch{}
+    }
+    clearTimeout(timer);timer=setTimeout(next,remain);
+  }
+  function play(offset=0,remaining=null){
     clearTimeout(timer);const my=++token;
     if(!current.length){standby();return;}
     const a=current[index];if(!a){index=0;play();return;}
@@ -254,14 +276,15 @@ function startPlayer(){
       stage.innerHTML='<img class="tv-media" alt="" />';
       const img=stage.querySelector('img');img.src=url;
       img.onerror=()=>{if(my===token)timer=setTimeout(next,1500);};
-      timer=setTimeout(()=>{if(my===token)next();},Math.max(3,Math.min(3600,Number(a.duration_seconds)||10))*1000);
+      timer=setTimeout(()=>{if(my===token)next();},remaining??duration(a));
     } else if(a.kind==='video'){
       stage.innerHTML='<video class="tv-media" autoplay muted playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.muted=true;video.src=url;
+      if(sync&&offset>0)video.onloadedmetadata=()=>{try{video.currentTime=Math.min(offset/1000,Math.max(0,video.duration-0.1));}catch{}};
       video.onended=()=>{if(my===token)next();};
       video.onerror=()=>{if(my===token)next();};
       video.play().catch(()=>{if(my===token){indicator.textContent='Redarea video a fost blocată; verifică playerul TV.';timer=setTimeout(next,3000);}});
-      timer=setTimeout(()=>{if(my===token)next();},60*60*1000);
+      timer=setTimeout(()=>{if(my===token)next();},remaining??60*60*1000);
     } else next();
   }
   async function refresh(){
@@ -270,10 +293,18 @@ function startPlayer(){
       if(error)throw error;
       if(!data){standby('Televizorul nu există. Verifică linkul din panoul admin.');indicator.textContent='Ecran necunoscut';return;}
       const items=Array.isArray(data.items)?data.items:[];
-      localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));
+      try{localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));}catch{}
       indicator.textContent='';
-      if(first){first=false;current=items;index=0;play();}
-      else if(JSON.stringify(items)!==JSON.stringify(current)){pending=items;if(!current.length)next();}
+      const now=Date.now(),stamp=Date.parse(data.server_time);
+      if(Number.isFinite(stamp))syncOffset=stamp-now;
+      const newSync=Boolean(data.synchronized && data.sync_anchor),newAnchor=Date.parse(data.sync_anchor||'');
+      const newSignature=JSON.stringify({items,newSync,anchor:data.sync_anchor});
+      if(first||newSignature!==signature){
+        const wasFirst=first;first=false;signature=newSignature;sync=newSync;syncAnchor=Number.isFinite(newAnchor)?newAnchor:0;
+        if(sync){current=items;pending=null;align(true);}
+        else if(wasFirst||!current.length){current=items;index=0;play();}
+        else pending=items;
+      }else if(sync)align();
     }catch(e){
       indicator.textContent='Conexiune indisponibilă · se reîncearcă';
       if(first){try{const saved=JSON.parse(localStorage.getItem(cacheKey));if(saved?.items?.length){current=saved.items;first=false;play();}else standby('Așteptăm conexiunea la internet...');}catch{standby('Așteptăm conexiunea la internet...');}}
@@ -291,5 +322,6 @@ function startPlayer(){
   }
   refresh();heartbeat();
   setInterval(refresh,15000);setInterval(heartbeat,15000);
+  setInterval(()=>{if(sync)align();},3000);
   window.addEventListener('online',()=>{refresh();heartbeat();});
 }
