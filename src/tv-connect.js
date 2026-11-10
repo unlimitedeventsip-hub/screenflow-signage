@@ -10,12 +10,12 @@ export function installation(create=false){
  return {id,secret};
 }
 export function deviceInfo(){
- const ua=navigator.userAgent||'',m=/ScreenflowTV\/([\w.]+)/i.exec(ua);
+ const ua=navigator.userAgent||'',m=/ScreenflowTV\/([\w.]+)/i.exec(ua),p=/ScreenflowProjector\/([\w.]+)/i.exec(ua);
  return {
-  p_platform:/Android/i.test(ua)?'Android TV / TCL':/Tizen/i.test(ua)?'Samsung Tizen':/WebOS|Web0S/i.test(ua)?'LG webOS':'Smart TV / Browser',
-  p_client_type:m?'Screenflow APK':'Browser / PWA',
+  p_platform:p?'Android Projector / Acer PD1520s':/Android/i.test(ua)?'Android TV / TCL':/Tizen/i.test(ua)?'Samsung Tizen':/WebOS|Web0S/i.test(ua)?'LG webOS':'Smart TV / Browser',
+  p_client_type:p?'Screenflow Projector APK':m?'Screenflow APK':'Browser / PWA',
   p_resolution:(screen.width||innerWidth)+'×'+(screen.height||innerHeight),
-  p_app_version:m?m[1]:'web-2'
+  p_app_version:p?p[1]:m?m[1]:'web-2'
  };
 }
 export async function tvPing(supabase,extras={},create=false){
