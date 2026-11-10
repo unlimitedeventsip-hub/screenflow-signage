@@ -1,3 +1,16 @@
+## Screenflow TCL 2.1 — Cloudflare Workers
+
+Hostname activ pentru aplicația Android TV: `screenflow-signagead.unlimited-events-ip.workers.dev`.
+
+- Administrator: https://screenflow-signagead.unlimited-events-ip.workers.dev/admin
+- Asociere TV automată: https://screenflow-signagead.unlimited-events-ip.workers.dev/connect
+- Linkul de player existent furnizat de administrator: https://screenflow-signagead.unlimited-events-ip.workers.dev/play/ffc62e5a-4f77-4ef5-ba08-32e0b9d7712b
+- La prima pornire APK-ul TCL deschide **/connect**, nu ID-ul exemplului, deoarece fiecare TV trebuie aprobat separat și atribuit unui ecran. După aprobare deschide automat URL-ul propriu de play.
+- Pentru funcția de asociere este obligatorie migrarea SQL nedistructivă `supabase/upgrade_v2_auto_pair.sql` în Supabase existent. Datele nu sunt migrate în Cloudflare.
+- Pentru cinci televizoare la Unirii: instalează același APK, aprobă cele cinci coduri TV, apoi atribuie aceeași locație și playlist; poți activa sincronizarea aproximativă a playlistului.
+- Dacă Android raportează `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, APK-ul de debug a fost semnat cu altă cheie: dezinstalează aplicația veche și instalează noul APK. Aceasta șterge doar datele locale ale aplicației TCL și impune o nouă asociere.
+- Această versiune este pentru **test**; APK-urile de producție trebuie semnate cu o cheie persistentă.
+
 ## Screenflow TV 2.0 — asociere automată (TCL Android TV)
 
 **Actualizare:** aplicația TCL v2 intră direct la `/connect` în loc să solicite un link `/play/UUID`.
