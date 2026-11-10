@@ -29,8 +29,7 @@ import android.widget.Toast;
 import java.util.UUID;
 
 public final class MainActivity extends Activity {
-    private static final String HOST = "screenflowum.netlify.app";
-    private static final String DEFAULT_ID = "0e2e173f-b917-4fff-8083-c0705d9590ba"; // Legacy TV ID (retained only for fallback)
+    private static final String HOST = "screenflow-signagead.unlimited-events-ip.workers.dev";
     private static final String PREF_KEY = "player_url";
     private WebView web;
     private FrameLayout frame;
@@ -104,7 +103,7 @@ public final class MainActivity extends Activity {
         web.setVerticalScrollBarEnabled(false);
         WebSettings s=web.getSettings();
         s.setJavaScriptEnabled(true);
-        s.setUserAgentString(s.getUserAgentString() + " ScreenflowTV/2.0");
+        s.setUserAgentString(s.getUserAgentString() + " ScreenflowTV/2.1.0");
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
