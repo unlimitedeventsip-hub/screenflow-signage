@@ -1,0 +1,26 @@
+name: Validate Screenflow web app
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'package.json'
+      - 'public/**'
+      - '.github/workflows/web-build.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build production website
+        run: npm run build
+      - name: Check SPA build output
+        run: test -s dist/index.html
