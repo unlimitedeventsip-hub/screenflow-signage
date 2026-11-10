@@ -1,3 +1,10 @@
+## Hosting principal: Cloudflare Pages
+
+Screenflow se mută de pe Netlify pe Cloudflare Pages. Configurarea completă și
+pașii de schimbare a APK-ului TCL sunt în [CLOUDFLARE_PAGES_SETUP.md](./CLOUDFLARE_PAGES_SETUP.md).
+Până la confirmarea noului domeniu și instalarea unui APK actualizat pe TCL,
+proiectul Netlify rămâne activ ca rezervă pentru a nu întrerupe reclamele.
+
 # Screenflow — Digital Signage pentru locații
 
 Panou de administrare în română pentru gestionarea reclamelor și playlisturilor pe mai multe televizoare, plus player web fullscreen ce rulează automat conținutul. Interfață responsive pentru computer/telefon.
