@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import './styles.css';
+import { startConnect, tvPing } from './tv-connect.js';
+import './tv-fleet.css';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -33,6 +35,8 @@ const icon = (name, size=19) => {
 
 if (!configured) {
   root.innerHTML = `<main class="setup-page"><div class="setup-card"><span class="brand-icon">${icon('monitor',28)}</span><p class="eyebrow">SCREENFLOW / SETUP</p><h1>Platforma este pregătită pentru configurare.</h1><p>Înainte de publicare, conectează proiectul Supabase folosind variabilele <code>VITE_SUPABASE_URL</code> și <code>VITE_SUPABASE_ANON_KEY</code>. Instrucțiunile complete sunt în README.md.</p><div class="setup-note">GitHub → Netlify → Supabase → reclame pe TV</div></div></main>`;
+} else if (location.pathname==='/connect') {
+  startConnect(supabase,root);
 } else if (isPlayer) {
   startPlayer();
 } else {
@@ -41,8 +45,8 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], selectedPlaylist:null, error:'', toast:'' };
-  const NAV = [ ['overview','grid','Panou general'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['screens','monitor','Televizoare'],['locations','pin','Locații'] ];
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, selectedPlaylist:null, error:'', toast:'' };
+  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['locations','pin','Locații'] ];
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const fmt = date => date ? new Date(date).toLocaleDateString('ro-RO',{day:'2-digit',month:'short',year:'numeric'}) : '—';
@@ -52,6 +56,31 @@ async function startAdmin() {
   const selectOptions = (rows, selected, optional='— Fără —') => `<option value="">${safe(optional)}</option>`+rows.map(x=>`<option value="${x.id}" ${selected===x.id?'selected':''}>${safe(x.name)}</option>`).join('');
   const empty = (i,head,description) => `<div class="empty">${icon(i,28)}<strong>${head}</strong><span>${description}</span></div>`;
 
+  function tvOnline(t){return Date.now()-new Date(t.last_seen_at).getTime() < 45000 && t.playback_state!=='background';}
+  async function refreshDevices(){
+    const {data,error}=await supabase.from('tv_installations').select('installation_id,screen_id,pair_code,pair_expires_at,first_seen_at,last_seen_at,platform,client_type,resolution,app_version,playback_state,current_asset_id,error_message').order('last_seen_at',{ascending:false}).limit(500);
+    state.fleetReady=!error;state.installations=data||[];
+  }
+  function pendingPanel(){
+    if(!state.fleetReady)return '<section class="panel tv-notice"><strong>Asocierea TV nu este activată încă.</strong><p>Rulează fișierul supabase/upgrade_v2_auto_pair.sql în SQL Editor din Supabase.</p></section>';
+    const pending=state.installations.filter(t=>!t.screen_id && tvOnline(t));
+    const locOptions=state.locations.map(l=>'<option value="'+safe(l.id)+'">'+safe(l.name)+'</option>').join('');
+    const playOptions=state.playlists.map(p=>'<option value="'+safe(p.id)+'">'+safe(p.name)+'</option>').join('');
+    return '<section class="panel tv-discovery"><div class="panel-head"><h2>Aplicații TV detectate automat</h2><span>'+pending.length+' în așteptare</span></div>'
+      +'<p>Deschide aplicația Screenflow TV pe fiecare televizor. Va apărea automat aici, fără să îl creezi manual.</p>'
+      +(pending.length?pending.map((t,i)=>'<article class="tv-new"><div><strong>'+safe(t.platform||'Televizor nou')+'</strong><span class="tv-pair-code">'+safe(t.pair_code||'------')+'</span></div><small>'+safe(t.client_type||'Screenflow TV')+' · '+safe(t.resolution||'—')+' · '+safe(t.app_version||'')+'</small><form data-form="tv-approve" data-id="'+safe(t.installation_id)+'"><input name="name" maxlength="100" required placeholder="Nume TV" value="TV nou '+(i+1)+'"><select name="location_id"><option value="">Locație (opțional)</option>'+locOptions+'</select><select name="playlist_id"><option value="">Alege playlistul</option>'+playOptions+'</select><button type="submit" class="btn primary">Asociază</button></form><small>Verifică să fie afișat codul '+safe(t.pair_code)+' pe televizor înainte de aprobare.</small></article>').join(''):'<p class="tv-empty">Niciun TV nou. Când deschizi aplicația, apare aici în aproximativ 15 secunde.</p>')
+      +'</section>';
+  }
+  function fleetSummary(){
+    const installed=state.installations.filter(t=>!!t.screen_id),live=installed.filter(tvOnline).length,waiting=state.installations.filter(t=>!t.screen_id && tvOnline(t)).length;
+    return '<section class="tv-summary"><div><small>Aplicații online</small><strong>'+live+'</strong></div><div><small>Aplicații înregistrate</small><strong>'+installed.length+'</strong></div><div><small>TV de asociat</small><strong>'+waiting+'</strong></div></section>';
+  }
+  function screenInfo(s){
+    const list=state.installations.filter(t=>t.screen_id===s.id);
+    const t=list[0];if(!t)return '<div class="tv-state">Nicio aplicație asociată încă</div>';
+    const online=tvOnline(t),asset=state.assets.find(a=>a.id===t.current_asset_id);
+    return '<div class="tv-state"><span class="'+(online?'tv-dot on':'tv-dot')+'"></span><strong>'+(online?'ONLINE':'OFFLINE')+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Acum: '+safe(asset.title):'Redare: '+safe(t.playback_state||'—'))+'</small><small>Ultima conexiune: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small></div>';
+  }
   async function load() {
     const [locations,playlists,assets,items,screens] = await Promise.all([
       supabase.from('locations').select('*').order('name'),
@@ -63,6 +92,7 @@ async function startAdmin() {
     for(const r of [locations,playlists,assets,items,screens]) if(r.error) throw r.error;
     Object.assign(state,{locations:locations.data,playlists:playlists.data,assets:assets.data,items:items.data,screens:screens.data});
     if(!state.selectedPlaylist || !state.playlists.some(p=>p.id===state.selectedPlaylist)) state.selectedPlaylist=state.playlists[0]?.id||null;
+    await refreshDevices();
   }
   async function validate() {
     const {data:{session}}=await supabase.auth.getSession(); state.session=session;
@@ -74,6 +104,9 @@ async function startAdmin() {
   }
   await validate();
   supabase.auth.onAuthStateChange((_event,session)=>{if(session?.access_token!==state.session?.access_token) setTimeout(validate,0);});
+  setInterval(async()=>{if(!state.isAdmin||state.busy||document.hidden)return;
+    try{await refreshDevices();if(!document.activeElement?.matches('input,textarea,select') && ['overview','screens'].includes(state.view))render();}catch{}
+  },15000);
 
   function frame(content) {
     const title = NAV.find(n=>n[0]===state.view)?.[2] || 'Panou general';
@@ -81,7 +114,7 @@ async function startAdmin() {
       <div class="brand"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>DIGITAL SIGNAGE</small></div></div>
       <div class="sidebar-label">WORKSPACE</div><nav class="nav">${NAV.map(n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-nav="${n[0]}">${icon(n[1])}<span>${n[2]}</span>${n[0]==='screens'?`<i>${state.screens.length}</i>`:''}</button>`).join('')}</nav>
       <div class="sidebar-bottom"><div class="account"><div class="avatar">${safe((state.session?.user?.email||'A')[0].toUpperCase())}</div><div><strong>Administrator</strong><small title="${safe(state.session?.user?.email)}">${safe(state.session?.user?.email)}</small></div></div><button data-action="logout" class="icon-button" title="Deconectare">${icon('logout')}</button></div>
-    </aside><main class="main"><header class="topbar"><div class="crumb"><span>WORKSPACE</span><span>/</span><strong>${title}</strong></div><div class="top-actions"><span class="status"><b></b> Sistem conectat</span><button class="btn subtle small" data-nav="screens">${icon('monitor',16)} Ecranele mele</button></div></header>
+    </aside><main class="main"><header class="topbar"><div class="crumb"><span>WORKSPACE</span><span>/</span><strong>${title}</strong></div><div class="top-actions"><span class="status"><b></b> ${state.fleetReady?'Monitorizare TV activă':'Control reclame'}</span><button class="btn subtle small" data-nav="screens">${icon('monitor',16)} Ecranele mele</button></div></header>
     <div class="content">${state.error?`<div class="alert">${safe(state.error)} <button data-action="dismiss-error">×</button></div>`:''}${content}</div></main>
     ${state.toast?`<div class="toast">${icon('check',17)} ${safe(state.toast)}</div>`:''}
     ${state.busy?'<div class="busy"><div class="spinner"></div> Se procesează...</div>':''}</div>`;
@@ -95,7 +128,7 @@ async function startAdmin() {
     <div class="stat"><div class="stat-icon">${icon('image')}</div><span>Reclame active</span><strong>${active}</strong><small>Imagini și videoclipuri</small></div>
     <div class="stat"><div class="stat-icon">${icon('list')}</div><span>Playlisturi</span><strong>${state.playlists.length}</strong><small>Actualizare automată pe TV</small></div>
     <div class="stat"><div class="stat-icon">${icon('pin')}</div><span>Locații</span><strong>${state.locations.length}</strong><small>Dintr-un singur dashboard</small></div></div>
-    <div class="two-col"><section class="panel"><div class="panel-head"><h2>Acces rapid</h2><span>CONTROL CENTER</span></div><div class="quick">${[['assets','cloud','Încarcă materiale','Poze și video în bibliotecă'],['playlists','list','Construiește un playlist','Alege ordinea și durata'],['screens','monitor','Conectează un televizor','Deschide linkul unic pe TV']].map(v=>`<button data-nav="${v[0]}" class="quick-item"><span class="quick-icon">${icon(v[1])}</span><span><strong>${v[2]}</strong><small>${v[3]}</small></span>${icon('arrow',17)}</button>`).join('')}</div></section>
+    ${fleetSummary()}${pendingPanel()}<div class="two-col"><section class="panel"><div class="panel-head"><h2>Acces rapid</h2><span>CONTROL CENTER</span></div><div class="quick">${[['assets','cloud','Încarcă materiale','Poze și video în bibliotecă'],['playlists','list','Construiește un playlist','Alege ordinea și durata'],['screens','monitor','Conectează un televizor','Deschide linkul unic pe TV']].map(v=>`<button data-nav="${v[0]}" class="quick-item"><span class="quick-icon">${icon(v[1])}</span><span><strong>${v[2]}</strong><small>${v[3]}</small></span>${icon('arrow',17)}</button>`).join('')}</div></section>
     <section class="panel"><div class="panel-head"><h2>Ultimele materiale</h2><button data-nav="assets" class="text-link">Vezi toate ${icon('arrow',15)}</button></div>${state.assets.length?`<div class="recent">${state.assets.slice(0,4).map(a=>`<div class="recent-row"><span class="mini-preview">${a.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt=""/>`:`${icon('play',18)}`}</span><div><strong>${safe(a.title)}</strong><small>${a.kind==='image'?'Imagine':'Video'} · ${fmt(a.created_at)}</small></div><span class="pill ${a.enabled?'green':'gray'}">${a.enabled?'Activ':'Oprit'}</span></div>`).join('')}</div>`:empty('image','Biblioteca este goală','Încarcă prima reclamă pentru a începe.')}</section></div>`;
   }
   function assetsView(){
@@ -110,8 +143,8 @@ async function startAdmin() {
     <section class="panel playlist-editor">${playlist?`<div class="panel-head"><div><div class="kicker">EDITARE PLAYLIST</div><h2>${safe(playlist.name)}</h2></div><button class="icon-button danger" title="Șterge playlist" data-action="delete-playlist" data-id="${playlist.id}">${icon('trash',18)}</button></div><form data-form="playlist-add" class="add-form"><select name="asset_id" required><option value="">Alege reclamă...</option>${addable.map(a=>`<option value="${a.id}">${safe(a.title)} (${a.kind})</option>`).join('')}</select><button class="btn primary" type="submit" ${!addable.length?'disabled':''}>${icon('plus',17)} Adaugă</button></form><div class="sortable-list">${items.length?items.map((item,index)=>{const a=state.assets.find(a=>a.id===item.asset_id);return `<div class="sequence-item"><span class="sequence-no">${String(index+1).padStart(2,'0')}</span><span class="sequence-thumbnail">${a?.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt="">`:icon('play',18)}</span><div class="sequence-info"><strong>${safe(a?.title||'Material șters')}</strong><small>${a?.kind==='video'?'Video · până la final':'Imagine · '+(item.duration_override||a?.duration_seconds||10)+' sec'}</small></div><div class="sequence-actions"><button type="button" class="icon-button" title="Mută sus" data-action="item-up" data-id="${item.id}" ${index===0?'disabled':''}>${icon('up',17)}</button><button type="button" class="icon-button" title="Mută jos" data-action="item-down" data-id="${item.id}" ${index===items.length-1?'disabled':''}>${icon('down',17)}</button><button type="button" class="icon-button danger" title="Elimină" data-action="item-remove" data-id="${item.id}">${icon('trash',17)}</button></div></div>`;}).join(''):empty('list','Playlist gol','Alege reclame din lista de mai sus.')}</div>`:empty('list','Selectează un playlist','Creează sau alege un playlist din stânga.')}</section></div>`;
   }
   function screensView(){
-    const rows=state.screens.map(s=>{const l=state.locations.find(l=>l.id===s.location_id);const p=state.playlists.find(p=>p.id===s.playlist_id);const link=`${location.origin}/play/${s.public_id}`;return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><button type="submit" class="btn small subtle">Actualizează</button></form><div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
-    return heading('DISTRIBUȚIE','Televizoare','Fiecare TV primește un link unic. Îl deschizi o singură dată pe ecran, apoi controlezi conținutul de aici.')+`<section class="panel create-screen"><div><h2>Conectează un televizor nou</h2><p>Adaugă-l, copiază linkul și deschide-l pe TV.</p></div><form data-form="screen-new" class="screen-form"><input name="name" placeholder="Ex.: TV Bar 1" required maxlength="100"><select name="location_id">${selectOptions(state.locations,null,'Alege locația')}</select><select name="playlist_id">${selectOptions(state.playlists,null,'Alege playlistul')}</select><button class="btn primary" type="submit">${icon('plus',16)} Adaugă ecran</button></form></section><div class="section-heading"><h2>Ecranele tale <span>${state.screens.length}</span></h2></div>${rows?`<div class="screens-grid">${rows}</div>`:empty('monitor','Niciun ecran adăugat','Configurează un televizor folosind formularul de mai sus.')}`;
+    const rows=state.screens.map(s=>{const l=state.locations.find(l=>l.id===s.location_id);const p=state.playlists.find(p=>p.id===s.playlist_id);const link=`${location.origin}/play/${s.public_id}`;return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><select name="location">${selectOptions(state.locations,s.location_id,'Fără locație')}</select><button type="submit" class="btn small subtle">Actualizează</button></form>${screenInfo(s)}<div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
+    return heading('DISTRIBUȚIE','Televizoare','Aplicațiile TV apar automat. Confirmă codul de pe ecran, alege locația și playlistul.')+fleetSummary()+pendingPanel()+`<section class="panel tv-bulk"><h2>Playlist comun pentru locație</h2><form data-form="tv-bulk" class="tv-bulk-form"><select name="location_id" required>${selectOptions(state.locations,null,'Locația')}</select><select name="playlist_id" required>${selectOptions(state.playlists,null,'Playlistul')}</select><button class="btn primary" type="submit">Aplică la toate TV-urile</button></form><p>Exemplu: toate cele 5 TV de la #altfel Unirii vor primi același playlist.</p></section><details class="panel tv-legacy"><summary>Adăugare manuală (doar pentru browsere vechi)</summary><section class="create-screen"><div><h2>Conectează un televizor nou</h2><p>Adaugă-l, copiază linkul și deschide-l pe TV.</p></div><form data-form="screen-new" class="screen-form"><input name="name" placeholder="Ex.: TV Bar 1" required maxlength="100"><select name="location_id">${selectOptions(state.locations,null,'Alege locația')}</select><select name="playlist_id">${selectOptions(state.playlists,null,'Alege playlistul')}</select><button class="btn primary" type="submit">${icon('plus',16)} Adaugă ecran</button></form></section></details><div class="section-heading"><h2>Ecranele tale <span>${state.screens.length}</span></h2></div>${rows?`<div class="screens-grid">${rows}</div>`:empty('monitor','Niciun ecran adăugat','Configurează un televizor folosind formularul de mai sus.')}`;
   }
   function locationsView(){
     return heading('ORGANIZARE','Locații','Grupează televizoarele după restaurant, bar, terasă sau alte puncte de difuzare.')+`<section class="panel location-panel"><div class="panel-head"><h2>Adaugă locație</h2></div><form data-form="location-new" class="stack-form"><input name="name" placeholder="Ex.: #altfel ParkLake" maxlength="100" required><button class="btn primary" type="submit">${icon('plus',17)} Creează locație</button></form><div class="location-list">${state.locations.map(l=>`<div class="location-item"><span class="location-icon">${icon('pin')}</span><div><strong>${safe(l.name)}</strong><small>${state.screens.filter(s=>s.location_id===l.id).length} televizoare</small></div><button class="icon-button danger" data-action="delete-location" data-id="${l.id}">${icon('trash',17)}</button></div>`).join('')}</div></section>`;
@@ -150,8 +183,25 @@ async function startAdmin() {
     if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else await validate();return;}
     if(type==='location-new'){if(val('name'))perform(()=>insert('locations',{name:val('name')}),'Locație adăugată.');return;}
     if(type==='playlist-new'){if(val('name'))perform(()=>insert('playlists',{name:val('name')}),'Playlist creat.');return;}
+    if(type==='tv-approve'){
+      const t=state.installations.find(x=>x.installation_id===id && !x.screen_id);
+      if(!t||!t.pair_code){showError('Dispozitivul nu mai așteaptă asocierea.');return;}
+      if(!confirm('Pe televizor apare codul '+t.pair_code+'? Confirmi asocierea?'))return;
+      perform(async()=>{const {error}=await supabase.rpc('tv_approve',{
+        p_installation_id:t.installation_id,p_pair_code:t.pair_code,
+        p_name:val('name'),p_location_id:val('location_id')||null,
+        p_playlist_id:val('playlist_id')||null
+      });if(error)throw error;},'Televizor asociat. Va porni automat reclamele.');return;
+    }
+    if(type==='tv-bulk'){
+      const loc=val('location_id'),play=val('playlist_id');
+      const count=state.screens.filter(s=>s.location_id===loc).length;
+      if(!count){showError('Nu există televizoare asociate la această locație.');return;}
+      if(!confirm('Aplici playlistul la toate cele '+count+' televizoare?'))return;
+      perform(async()=>{const {error}=await supabase.from('screens').update({playlist_id:play}).eq('location_id',loc);if(error)throw error;},'Playlist aplicat la '+count+' TV-uri.');return;
+    }
     if(type==='screen-new'){perform(()=>insert('screens',{name:val('name'),location_id:val('location_id')||null,playlist_id:val('playlist_id')||null}),'Televizor adăugat.');return;}
-    if(type==='screen-assign'){perform(()=>patch('screens',id,{playlist_id:val('playlist')||null}),'Playlistul TV a fost actualizat.');return;}
+    if(type==='screen-assign'){perform(()=>patch('screens',id,{playlist_id:val('playlist')||null,location_id:val('location')||null}),'Setările TV au fost actualizate.');return;}
     if(type==='asset-edit'){
       const starts=val('starts'),ends=val('ends');const sec=Number(val('duration'));
       if(sec<3||sec>3600){showError('Durata trebuie să fie între 3 și 3600 secunde.');return;}
@@ -229,5 +279,17 @@ function startPlayer(){
       if(first){try{const saved=JSON.parse(localStorage.getItem(cacheKey));if(saved?.items?.length){current=saved.items;first=false;play();}else standby('Așteptăm conexiunea la internet...');}catch{standby('Așteptăm conexiunea la internet...');}}
     }
   }
-  refresh();setInterval(refresh,60000);window.addEventListener('online',refresh);
+  let reporting=false;
+  async function heartbeat(){
+    if(reporting)return;reporting=true;
+    try{
+      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(current.length?'playing':'waiting')});
+      if(r?.status==='pending')location.replace('/connect');
+      if(r?.status==='approved' && r.screen_public_id && r.screen_public_id!==publicId)location.replace('/play/'+r.screen_public_id);
+    }catch(e){console.warn('TV heartbeat',e?.message)}
+    finally{reporting=false}
+  }
+  refresh();heartbeat();
+  setInterval(refresh,15000);setInterval(heartbeat,15000);
+  window.addEventListener('online',()=>{refresh();heartbeat();});
 }
