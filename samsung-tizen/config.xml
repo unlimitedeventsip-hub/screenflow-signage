@@ -8,7 +8,7 @@
  <description xml:lang="ro">Reclame fullscreen si asociere automata la panoul Screenflow.</description>
  <content src="index.html"/>
  <icon src="icon.png"/>
- <access origin="https://screenflow-signagead.unlimited-events-ip.workers.dev" subdomains="false"/>
+ <access origin="*" subdomains="true"/>
  <tizen:allow-navigation>screenflow-signagead.unlimited-events-ip.workers.dev</tizen:allow-navigation>
  <tizen:privilege name="http://tizen.org/privilege/internet"/>
  <tizen:setting screen-orientation="landscape" context-menu="disable"
