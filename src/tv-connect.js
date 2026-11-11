@@ -11,11 +11,20 @@ export function installation(create=false){
 }
 export function deviceInfo(){
  const ua=navigator.userAgent||'',m=/ScreenflowTV\/([\w.]+)/i.exec(ua),p=/ScreenflowProjector\/([\w.]+)/i.exec(ua);
+ const isSamsung=/Tizen/i.test(ua);
+ let tizenApp=false;
+ try {
+   if(isSamsung && new URLSearchParams(location.search).get('sf_tizen')==='1'){
+     sessionStorage.setItem('screenflow:tizen:app','1');
+   }
+   tizenApp=isSamsung && sessionStorage.getItem('screenflow:tizen:app')==='1';
+ } catch(e) { tizenApp=false; }
+
  return {
   p_platform:p?'Android Projector / Acer PD1520s':/Android/i.test(ua)?'Android TV / TCL':/Tizen/i.test(ua)?'Samsung Tizen':/WebOS|Web0S/i.test(ua)?'LG webOS':'Smart TV / Browser',
-  p_client_type:p?'Screenflow Projector APK':m?'Screenflow APK':'Browser / PWA',
+  p_client_type:p?'Screenflow Projector APK':m?'Screenflow APK':tizenApp?'Screenflow Samsung Tizen':'Browser / PWA',
   p_resolution:(screen.width||innerWidth)+'×'+(screen.height||innerHeight),
-  p_app_version:p?p[1]:m?m[1]:'web-2'
+  p_app_version:p?p[1]:m?m[1]:tizenApp?'1.0.0':'web-2'
  };
 }
 export async function tvPing(supabase,extras={},create=false){

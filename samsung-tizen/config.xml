@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+ id="https://screenflow-signagead.unlimited-events-ip.workers.dev/tizen"
+ version="1.0.0" viewmodes="fullscreen">
+ <tizen:application id="SFScrn2021.Screenflow" package="SFScrn2021" required_version="6.0"/>
+ <tizen:profile name="tv-samsung"/>
+ <name>Screenflow Samsung</name>
+ <description xml:lang="ro">Reclame fullscreen si asociere automata la panoul Screenflow.</description>
+ <content src="index.html"/>
+ <icon src="icon.png"/>
+ <access origin="https://screenflow-signagead.unlimited-events-ip.workers.dev" subdomains="false"/>
+ <tizen:allow-navigation>screenflow-signagead.unlimited-events-ip.workers.dev</tizen:allow-navigation>
+ <tizen:privilege name="http://tizen.org/privilege/internet"/>
+ <tizen:setting screen-orientation="landscape" context-menu="disable"
+  background-support="disable" hwkey-event="enable" pointing-device-support="disable"/>
+</widget>
