@@ -1,0 +1,16 @@
+html, body {
+  height: 100%; margin: 0; padding: 0; overflow: hidden;
+  background: #0c1724; color: #edf5fb; font: normal 24px Arial, sans-serif;
+}
+main { display: flex; width: 100%; height: 100%; align-items: center;
+  justify-content: center; flex-direction: column; text-align: center; }
+.mark { width: 110px; height: 110px; border-radius: 28px;
+  background: #1a2c40; color: #d8bd87; font-size: 68px;
+  line-height: 110px; margin-bottom: 24px; }
+h1 { font-size: 48px; font-weight: bold; letter-spacing: -2px; margin: 0 0 16px; }
+h1 b { color: #d8bd87; }
+p { font-size: 24px; color: #b9c7d4; margin: 8px 0; max-width: 80%; }
+button { font-size: 22px; margin: 28px; background: #d8bd87;
+  color: #102033; border: 0; border-radius: 12px;
+  padding: 18px 34px; cursor: pointer; }
+[hidden] { display: none !important; }
