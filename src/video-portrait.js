@@ -20,10 +20,19 @@ export function attachPortraitBackdrop(stage, video, posterUrl) {
     if (stopped || !attached || !video.videoWidth || !video.videoHeight) return;
     var w = stage.clientWidth || window.innerWidth;
     var h = stage.clientHeight || window.innerHeight;
-    var mainWidth = Math.min(w, h * video.videoWidth / video.videoHeight);
-    var gutter = Math.max(0, Math.ceil((w - mainWidth) / 2));
-    left.style.width = gutter + 'px';
-    right.style.width = gutter + 'px';
+    var mainWidth = Math.max(1, Math.min(w, h * video.videoWidth / video.videoHeight));
+    var gutter = Math.max(0, (w - mainWidth) / 2);
+    // Critical for Tizen hardware video planes: the VIDEO ELEMENT itself must
+    // have portrait dimensions. object-fit:contain on a fullscreen video leaves
+    // black letterboxing inside the video plane and covers the blurred sides.
+    video.style.setProperty('width', Math.round(mainWidth) + 'px', 'important');
+    video.style.setProperty('height', Math.round(h) + 'px', 'important');
+    video.style.setProperty('max-width', 'none', 'important');
+    video.style.setProperty('flex', '0 0 auto', 'important');
+    video.width = Math.round(mainWidth);
+    video.height = Math.round(h);
+    left.style.width = Math.ceil(gutter) + 'px';
+    right.style.width = Math.ceil(gutter) + 'px';
   }
 
   function draw() {
@@ -106,5 +115,9 @@ export function attachPortraitBackdrop(stage, video, posterUrl) {
     if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
     if (sides && sides.parentNode) sides.parentNode.removeChild(sides);
     stage.classList.remove('tv-stage-portrait');
+    video.style.removeProperty('width');
+    video.style.removeProperty('height');
+    video.style.removeProperty('max-width');
+    video.style.removeProperty('flex');
   };
 }
