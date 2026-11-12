@@ -4,6 +4,8 @@ import { startConnect, tvPing } from './tv-connect.js';
 import './tv-fleet.css';
 import { createAudioPlayback } from './audio-playback.js';
 import { renderAudioView } from './audio-admin.js';
+import { attachPortraitBackdrop } from './video-portrait.js';
+import './video-portrait.css';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -295,7 +297,8 @@ function startPlayer(){
   const cacheKey=`screenflow:manifest:${publicId}`;
   const getUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const audio=createAudioPlayback({stage,indicator,getUrl});
-  const standby=(msg='Conținutul va apărea în curând.')=>{audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
+  let clearPortraitBackdrop=()=>{};
+  const standby=(msg='Conținutul va apărea în curând.')=>{clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
   const next=()=>{
     clearTimeout(timer);token++;
@@ -320,7 +323,7 @@ function startPlayer(){
     clearTimeout(timer);timer=setTimeout(next,remain);
   }
   function play(offset=0,remaining=null){
-    clearTimeout(timer);const my=++token;
+    clearTimeout(timer);clearPortraitBackdrop();clearPortraitBackdrop=()=>{};const my=++token;
     if(!current.length){standby();return;}
     const a=current[index];if(!a){index=0;play();return;}
     const url=getUrl(a.storage_path);
@@ -333,6 +336,7 @@ function startPlayer(){
     } else if(a.kind==='video'){
       stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.src=url;
+       clearPortraitBackdrop=attachPortraitBackdrop(stage,video);
       if(sync&&offset>0)video.onloadedmetadata=()=>{try{video.currentTime=Math.min(offset/1000,Math.max(0,video.duration-0.1));}catch{}};
       video.onended=()=>{if(my===token)next();};
       video.onerror=()=>{if(my===token)next();};
