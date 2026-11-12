@@ -1,70 +1,110 @@
-// Portrait video backdrop for Samsung Tizen 6 / Android TV / browsers.
-// Copies a few frames per second from the *single* foreground video into a
-// low-resolution, blurred canvas. This avoids decoding two independent videos.
-export function attachPortraitBackdrop(stage, video) {
-  let stopped = false;
-  let canvas = null;
-  let context = null;
-  let timer = null;
-  let drawingUnsupported = false;
-  const width = 384;
-  const height = 216;
+// Portrait video backgrounds for Samsung Tizen / Android TV / web.
+//
+// Samsung TV uses a hardware video plane (video hole). Drawing video frames
+// to Canvas can yield black. We display the pre-generated JPEG in SIDE PANELS
+// only, leaving the middle clear for the single foreground hardware video.
+// Other browsers can progressively enhance the sides with a live low-res Canvas.
+export function attachPortraitBackdrop(stage, video, posterUrl) {
+  var stopped = false;
+  var attached = false;
+  var canvas = null;
+  var context = null;
+  var timer = null;
+  var sides = null;
+  var left = null;
+  var right = null;
+  var width = 384, height = 216;
+  var isTizen = /Tizen/i.test(navigator.userAgent || '');
+
+  function layout() {
+    if (stopped || !attached || !video.videoWidth || !video.videoHeight) return;
+    var w = stage.clientWidth || window.innerWidth;
+    var h = stage.clientHeight || window.innerHeight;
+    var mainWidth = Math.min(w, h * video.videoWidth / video.videoHeight);
+    var gutter = Math.max(0, Math.ceil((w - mainWidth) / 2));
+    left.style.width = gutter + 'px';
+    right.style.width = gutter + 'px';
+  }
 
   function draw() {
     timer = null;
-    if (stopped || drawingUnsupported || !canvas || !stage.contains(video)) return;
-    if (!document.hidden && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+    if (stopped || !canvas || !stage.contains(video)) return;
+    if (!document.hidden && video.readyState >= 2 && video.videoWidth && video.videoHeight) {
       try {
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
-        const targetRatio = width / height;
-        const sourceRatio = vw / vh;
-        let sx = 0, sy = 0, sw = vw, sh = vh;
-        if (sourceRatio < targetRatio) {
-          sh = vw / targetRatio;
-          sy = (vh - sh) / 2;
-        } else {
-          sw = vh * targetRatio;
-          sx = (vw - sw) / 2;
-        }
-        // We do not inspect/read back pixels, so cross-origin canvas taint is
-        // harmless; the public video URL is only drawn to the display canvas.
+        var vw = video.videoWidth, vh = video.videoHeight;
+        var target = width / height;
+        var sw = vw, sh = vw / target, sx = 0, sy = (vh - sh) / 2;
+        if (sh > vh) { sh = vh; sw = vh * target; sx = (vw - sw) / 2; sy = 0; }
         context.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+        canvas.classList.add('tv-portrait-backdrop-ready');
       } catch (error) {
-        // Some hardware overlays cannot be copied into a 2D canvas. Keep
-        // the primary advertisement playing; never attempt a second decoder.
-        drawingUnsupported = true;
-        if (window.console && console.warn) console.warn('Screenflow portrait backdrop unavailable:', error);
+        // The poster remains as the fallback, and the foreground keeps playing.
+        if (window.console && console.warn) console.warn('Live blurred video unavailable:', error);
+        if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+        canvas = null;
         return;
       }
     }
-    timer = setTimeout(draw, 200);
+    timer = setTimeout(draw, 220);
+  }
+
+  function createSide(sideName) {
+    var panel = document.createElement('div');
+    panel.className = 'tv-portrait-side tv-portrait-' + sideName;
+    if (posterUrl) {
+      var img = document.createElement('img');
+      img.src = posterUrl;
+      img.alt = '';
+      img.setAttribute('aria-hidden', 'true');
+      panel.appendChild(img);
+    }
+    return panel;
   }
 
   function ready() {
-    if (stopped || canvas || !video.videoWidth || !video.videoHeight) return;
-    if (video.videoHeight <= video.videoWidth) return; // Landscape: unchanged
+    if (stopped || attached || !video.videoWidth || !video.videoHeight) return;
+    if (video.videoHeight <= video.videoWidth) return; // Landscape unchanged.
+    attached = true;
+    stage.classList.add('tv-stage-portrait');
+
+    // Empty panels retain an attractive gradient for old ads without posters.
+    sides = document.createElement('div');
+    sides.className = 'tv-portrait-sides';
+    left = createSide('left');
+    right = createSide('right');
+    sides.appendChild(left);
+    sides.appendChild(right);
+    stage.insertBefore(sides, video);
+    layout();
+
+    // Do not attempt a Canvas copy on Samsung hardware video overlays.
+    // Video must not be decoded twice on this TV.
+    if (isTizen) return;
+
     canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     canvas.className = 'tv-portrait-backdrop';
     canvas.setAttribute('aria-hidden', 'true');
     context = canvas.getContext('2d', { alpha: false });
-    if (!context) return;
-    // Insert behind the original (and only audible) video.
+    if (!context) { canvas = null; return; }
+    // Canvas stays behind the main video, and only becomes visible once
+    // the first successful frame has been drawn.
     stage.insertBefore(canvas, video);
-    stage.classList.add('tv-stage-portrait');
     draw();
   }
 
   video.addEventListener('loadedmetadata', ready);
+  window.addEventListener('resize', layout);
   if (video.readyState >= 1) ready();
 
   return function cleanup() {
     stopped = true;
     clearTimeout(timer);
     video.removeEventListener('loadedmetadata', ready);
+    window.removeEventListener('resize', layout);
     if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+    if (sides && sides.parentNode) sides.parentNode.removeChild(sides);
     stage.classList.remove('tv-stage-portrait');
   };
 }
