@@ -4,6 +4,7 @@
 # Nu modifica fisierul original, nu atinge TV-ul si nu cere token Supabase.
 param(
     [string]$InputFile = "",
+    [string]$InputUrl = "",
     [string]$OutputFile = ""
 )
 $ErrorActionPreference = "Stop"
@@ -81,6 +82,15 @@ function Convert-For-TV {
 }
 
 try {
+    if (!$InputFile -and $InputUrl) {
+        $parsed = [Uri]$InputUrl
+        if ($parsed.Scheme -ne 'https') { throw "Linkul videoclipului trebuie sa inceapa cu https://" }
+        $downloadFolder = Join-Path $env:USERPROFILE "Downloads"
+        if (!(Test-Path $downloadFolder)) { $downloadFolder = $env:TEMP }
+        $InputFile = Join-Path $downloadFolder ("Screenflow_sursa_" + [guid]::NewGuid().ToString("N").Substring(0,8) + ".mp4")
+        Write-Host "Descarc videoclipul original din Screenflow..." -ForegroundColor Cyan
+        Invoke-WebRequest -Uri $InputUrl -OutFile $InputFile -UseBasicParsing
+    }
     if (!$InputFile) { $InputFile = Select-VideoFile }
     if (!$InputFile -or !(Test-Path -LiteralPath $InputFile -PathType Leaf)) {
         throw "Nu ai selectat un MP4 valid."
