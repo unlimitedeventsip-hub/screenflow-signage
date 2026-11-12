@@ -1,0 +1,33 @@
+/* Premium fullscreen backdrop for portrait video.
+   Primary video remains sharp and fully visible. No second video decoder. */
+.tv-stage-portrait {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: #18212c;
+}
+.tv-stage-portrait .tv-portrait-backdrop {
+  position: absolute;
+  inset: -7%;
+  width: 114%;
+  height: 114%;
+  object-fit: cover;
+  z-index: 0;
+  filter: blur(28px);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.tv-stage-portrait::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(12, 20, 30, 0.16);
+  pointer-events: none;
+}
+.tv-stage-portrait video.tv-media {
+  position: relative;
+  z-index: 2;
+  object-fit: contain;
+  background: transparent;
+}
