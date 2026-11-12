@@ -73,7 +73,9 @@ function Convert-For-TV {
         "-filter_complex", $filter,
         "-map", "[v]", "-map", "0:a?",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", [string]$Crf,
-        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+        "-profile:v", "main", "-level:v", "4.0",
+        "-r", "30", "-g", "60", "-maxrate", "3500k", "-bufsize", "7000k",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
         "-movflags", "+faststart",
         $Destination
     )
