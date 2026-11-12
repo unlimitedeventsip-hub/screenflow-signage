@@ -3,7 +3,7 @@
 // Background music plays over images only and pauses for videos.
 export function createAudioPlayback({ stage, indicator, getUrl }) {
   const bg = document.createElement('audio');
-  bg.loop = true;
+  bg.loop = false; // Multi-part MP3 loops across segments
   bg.preload = 'auto';
   bg.setAttribute('aria-hidden', 'true');
   bg.className = 'tv-background-audio';
@@ -23,7 +23,17 @@ export function createAudioPlayback({ stage, indicator, getUrl }) {
   };
   let settings = defaults;
   let audioPath = '';
+  let partPaths = [];
+  let partIndex = 0;
   let currentMedia = 'none';
+
+  function nextMusicPart() {
+    if (!partPaths.length) return;
+    partIndex = (partIndex + 1) % partPaths.length;
+    bg.src = getUrl(partPaths[partIndex]);
+    if (currentMedia === 'image' && settings.background_audio_enabled && !document.hidden) playMusic();
+  }
+  bg.addEventListener('ended', nextMusicPart);
 
   function volume(v, fallback) {
     const n = Number(v);
@@ -43,7 +53,7 @@ export function createAudioPlayback({ stage, indicator, getUrl }) {
   }
   function playMusic() {
     if (currentMedia !== 'image' || document.hidden || !settings.background_audio_enabled ||
-        !settings.background_track_path || volume(settings.background_volume, 25) === 0) {
+        !partPaths.length || volume(settings.background_volume, 25) === 0) {
       pauseMusic();
       return;
     }
@@ -73,19 +83,28 @@ export function createAudioPlayback({ stage, indicator, getUrl }) {
     else pauseMusic();
   }
   function applySettings(data) {
+    const chunks = Array.isArray(data.background_track_parts)
+      ? data.background_track_parts.filter(v => typeof v === 'string' && v.indexOf('audio/') === 0)
+      : [];
+    if (!chunks.length && typeof data.background_track_path === 'string' && data.background_track_path) {
+      chunks.push(data.background_track_path);
+    }
     settings = {
       video_audio_enabled: Boolean(data.video_audio_enabled),
       video_volume: data.video_volume == null ? 35 : data.video_volume,
       background_audio_enabled: Boolean(data.background_audio_enabled),
       background_volume: data.background_volume == null ? 25 : data.background_volume,
-      background_track_path: data.background_track_path || null
+      background_track_path: data.background_track_path || null,
+      background_track_parts: chunks
     };
-    const path = settings.background_audio_enabled && settings.background_track_path
-      ? settings.background_track_path : '';
-    if (audioPath !== path) {
+    const newParts = settings.background_audio_enabled ? chunks : [];
+    const key = JSON.stringify(newParts);
+    if (audioPath !== key) {
       pauseMusic();
-      audioPath = path;
-      if (path) bg.src = getUrl(path);
+      audioPath = key;
+      partPaths = newParts;
+      partIndex = 0;
+      if (partPaths.length) bg.src = getUrl(partPaths[0]);
       else { bg.removeAttribute('src'); bg.load(); }
     }
     bg.volume = volume(settings.background_volume, 25);
