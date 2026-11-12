@@ -174,6 +174,15 @@ async function startAdmin() {
       perform(()=>patch('playlists',id,{synchronized:!p.synchronized,sync_anchor:new Date().toISOString()}),
         p.synchronized?'Sincronizare oprită.':'TV-urile cu acest playlist sunt sincronizate.');return;
     }
+    if(a==='delete-audio'){
+      if(!confirm('Ștergi această piesă din bibliotecă și din playlisturi?'))return;
+      const track=state.tracks.find(t=>t.id===id);if(!track)return;
+      perform(async()=>{
+        await remove('audio_tracks',id);
+        const {error}=await supabase.storage.from('ads').remove([track.storage_path]);
+        if(error)throw error;
+      },'Piesa a fost ștearsă.');return;
+    }
     if(a==='copy-link'){const s=state.screens.find(s=>s.id===id); if(!s)return;const value=`${location.origin}/play/${s.public_id}`;try{await navigator.clipboard.writeText(value);toast('Linkul TV a fost copiat.');}catch{window.prompt('Copiază linkul:',value);}return;}
     if(a==='toggle-asset'){const o=state.assets.find(x=>x.id===id);if(o)perform(()=>patch('assets',id,{enabled:!o.enabled}),'Starea reclamei a fost schimbată.');return;}
     if(['delete-asset','delete-playlist','delete-screen','delete-location'].includes(a)){
@@ -223,6 +232,40 @@ async function startAdmin() {
     if(type==='playlist-add'){
       const assetId=val('asset_id'), arr=state.items.filter(i=>i.playlist_id===state.selectedPlaylist);if(!assetId)return;
       perform(()=>insert('playlist_items',{playlist_id:state.selectedPlaylist,asset_id:assetId,position:Math.max(0,...arr.map(i=>i.position))+1}),'Material adăugat în playlist.');return;
+    }
+    if(type==='audio-settings'){
+      const vv=Number(val('video_volume')),bv=Number(val('background_volume'));
+      if(![vv,bv].every(x=>Number.isInteger(x)&&x>=0&&x<=100)){
+        showError('Volumul trebuie să fie între 0 și 100%.');return;
+      }
+      if(form.has('background_audio_enabled')&&!val('background_track_id')){
+        showError('Alege întâi o piesă pentru muzica de fundal.');return;
+      }
+      perform(()=>patch('playlists',id,{
+        video_audio_enabled:form.has('video_audio_enabled'),video_volume:vv,
+        background_audio_enabled:form.has('background_audio_enabled'),background_volume:bv,
+        background_track_id:val('background_track_id')||null
+      }),'Setările audio ale playlistului au fost salvate.');return;
+    }
+    if(type==='audio-upload'){
+      const file=form.get('file'),name=val('title');
+      if(!(file instanceof File)||!file.size||!name)return;
+      if(!file.name.toLowerCase().endsWith('.mp3') ||
+         !['audio/mpeg','audio/mp3','application/octet-stream',''].includes(file.type)){
+        showError('Încarcă un fișier MP3 compatibil cu Samsung TV.');return;
+      }
+      if(file.size>20*1024*1024){
+        showError('Piesa depășește 20 MB. Comprimă fișierul MP3.');return;
+      }
+      const path='audio/'+crypto.randomUUID()+'.mp3';
+      perform(async()=>{
+        const {error}=await supabase.storage.from('ads').upload(path,file,{
+          contentType:'audio/mpeg',cacheControl:'3600',upsert:false
+        });
+        if(error)throw error;
+        try{await insert('audio_tracks',{name,storage_path:path});}
+        catch(e){await supabase.storage.from('ads').remove([path]);throw e;}
+      },'Piesa a fost încărcată. Alege-o în setările playlistului.');return;
     }
     if(type==='upload'){
       const file=form.get('file'), name=val('title');if(!(file instanceof File)||!file.size||!name)return;
