@@ -1,29 +1,54 @@
-/* Premium fullscreen backdrop for portrait video.
-   Primary video remains sharp and fully visible. No second video decoder. */
+/* Portrait 9:16 ads with soft full-screen framing on TV displays.
+   Samsung Tizen 6 renders video in a hardware plane under web layers, so the
+   poster is clipped strictly to the SIDE gutters: the center stays clear. */
 .tv-stage-portrait {
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  background: #18212c;
+  background: #23303d;
 }
+.tv-stage-portrait .tv-portrait-sides {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.tv-stage-portrait .tv-portrait-side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  background: linear-gradient(125deg, #43566b, #1c2835 47%, #5f6b79);
+}
+.tv-stage-portrait .tv-portrait-left { left: 0; }
+.tv-stage-portrait .tv-portrait-right { right: 0; }
+.tv-stage-portrait .tv-portrait-side img {
+  position: absolute;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  object-fit: cover;
+  filter: blur(30px) brightness(0.78);
+  transform: scale(1.07);
+  transform-origin: center;
+}
+.tv-stage-portrait .tv-portrait-left img { left: 0; }
+.tv-stage-portrait .tv-portrait-right img { right: 0; }
+/* Progressive animated blur for browsers able to copy HTML video frames. */
 .tv-stage-portrait .tv-portrait-backdrop {
   position: absolute;
   inset: -7%;
   width: 114%;
   height: 114%;
   object-fit: cover;
-  z-index: 0;
-  filter: blur(28px);
-  opacity: 0.85;
+  z-index: 1;
+  filter: blur(28px) brightness(0.82);
+  opacity: 0.86;
   pointer-events: none;
 }
-.tv-stage-portrait::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: rgba(12, 20, 30, 0.16);
-  pointer-events: none;
+.tv-stage-portrait .tv-portrait-backdrop:not(.tv-portrait-backdrop-ready) {
+  visibility: hidden;
 }
 .tv-stage-portrait video.tv-media {
   position: relative;
