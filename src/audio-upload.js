@@ -16,7 +16,7 @@ function storageEndpoint(projectUrl) {
 function describeUploadError(error) {
   const text = String(error && (error.message || error) || 'Eroare necunoscută');
   if (/\b413\b|EntityTooLarge|exceeds.*limit|file size limit|maximum file size|too large/i.test(text)) {
-    return new Error('Supabase a respins fișierul: limita de stocare a proiectului este prea mică. Planul Free permite maximum 50 MB/fișier. Pentru 200 MB ai nevoie de Pro și de limită globală setată la cel puțin 200 MB în Storage Settings.');
+    return new Error('Supabase a respins un segment MP3. Screenflow împarte automat muzica în fișiere sub 50 MB; verifică dacă limita proiectului din Storage Settings este de cel puțin 45 MB și dacă mai ai spațiu disponibil.');
   }
   if (/\b401\b|\b403\b|unauthorized|invalid.*jwt|expired/i.test(text)) {
     return new Error('Sesiunea de administrator a expirat sau nu are drepturi de încărcare. Reautentifică-te și încearcă din nou.');
