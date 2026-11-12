@@ -14,7 +14,11 @@ export function attachPortraitBackdrop(stage, video, posterUrl) {
   var left = null;
   var right = null;
   var width = 384, height = 216;
-  var isTizen = /Tizen/i.test(navigator.userAgent || '');
+  // Android TV WebView (including TCL) may decode video in a hardware overlay.
+  // drawImage(video) can silently return BLACK frames even without an exception.
+  // Use the server-hosted JPEG poster in the side panels on those devices.
+  var ua = navigator.userAgent || '';
+  var usesHardwareVideo = /Tizen|Android|ScreenflowTV\//i.test(ua);
 
   function layout() {
     if (stopped || !attached || !video.videoWidth || !video.videoHeight) return;
@@ -86,9 +90,9 @@ export function attachPortraitBackdrop(stage, video, posterUrl) {
     stage.insertBefore(sides, video);
     layout();
 
-    // Do not attempt a Canvas copy on Samsung hardware video overlays.
-    // Video must not be decoded twice on this TV.
-    if (isTizen) return;
+    // Use a still blurred frame on both Samsung and Android/TCL hardware TV
+    // decoders. Other desktop browsers may use the animated Canvas enhancement.
+    if (usesHardwareVideo) return;
 
     canvas = document.createElement('canvas');
     canvas.width = width;
