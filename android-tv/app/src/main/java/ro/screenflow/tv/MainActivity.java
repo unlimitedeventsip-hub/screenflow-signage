@@ -5,16 +5,19 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.util.Log;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
+import android.webkit.ConsoleMessage;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -38,6 +41,7 @@ public final class MainActivity extends Activity {
     private String playerUrl;
     private boolean failed = false;
     private long lastBack = 0L;
+    private long lastPausedAtMs = 0L;
     private Handler handler = new Handler(Looper.getMainLooper());
     private Runnable retry;
 
@@ -103,7 +107,7 @@ public final class MainActivity extends Activity {
         web.setVerticalScrollBarEnabled(false);
         WebSettings s=web.getSettings();
         s.setJavaScriptEnabled(true);
-        s.setUserAgentString(s.getUserAgentString() + " ScreenflowTV/2.1.0");
+        s.setUserAgentString(s.getUserAgentString() + " ScreenflowTV/2.2.0");
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -115,7 +119,14 @@ public final class MainActivity extends Activity {
         s.setLoadsImagesAutomatically(true);
         if (Build.VERSION.SDK_INT >= 26) s.setSafeBrowsingEnabled(true);
         WebView.setWebContentsDebuggingEnabled(false);
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage msg) {
+                if (msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    Log.e("ScreenflowTV", "Web: " + msg.message() + " @ " + msg.sourceId() + ":" + msg.lineNumber());
+                }
+                return super.onConsoleMessage(msg);
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
                 return req.isForMainFrame() && verify(req.getUrl().toString())==null;
@@ -208,9 +219,19 @@ public final class MainActivity extends Activity {
         super.onResume();
         immersive();
         if(web!=null) web.onResume();
-        if(failed) open();
+        if(failed) {
+            open();
+        } else if(web!=null && lastPausedAtMs > 0L
+                && SystemClock.elapsedRealtime() - lastPausedAtMs > 45000L) {
+            // Restore the existing /play URL after TCL standby without deleting
+            // WebView localStorage or forcing a new pairing.
+            Log.i("ScreenflowTV", "Resuming WebView after standby");
+            web.reload();
+        }
+        lastPausedAtMs = 0L;
     }
     @Override protected void onPause() {
+        lastPausedAtMs = SystemClock.elapsedRealtime();
         if(web!=null) web.onPause();
         super.onPause();
     }
