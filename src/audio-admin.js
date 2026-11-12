@@ -3,7 +3,7 @@ export function renderAudioView({ state, heading, safe, pubUrl }) {
   const selected = state.playlists.find(p => p.id === state.selectedPlaylist);
   const menu = state.playlists.map(p => `<button class="playlist-option ${selected?.id === p.id ? 'selected' : ''}" data-action="select-playlist" data-id="${safe(p.id)}"><span>♫</span><div><strong>${safe(p.name)}</strong><small>Setări audio individuale</small></div></button>`).join('');
   const tracks = state.tracks.map(t => `<div class="audio-track">
-    <div><strong>${safe(t.name)}</strong><small>MP3</small></div>
+    <div><strong>${safe(t.name)}</strong><small>MP3 · ${Array.isArray(t.parts) && t.parts.length ? t.parts.length : 1} segment(e)</small></div>
     <audio controls preload="none" src="${safe(pubUrl(t.storage_path))}"></audio>
     <button type="button" class="btn small subtle" data-action="delete-audio" data-id="${safe(t.id)}">Șterge</button>
   </div>`).join('');
@@ -40,13 +40,13 @@ export function renderAudioView({ state, heading, safe, pubUrl }) {
     <section class="panel audio-settings-panel">${settings}</section>
   </div>
   <section class="panel audio-library">
-    <div class="panel-head"><h2>Bibliotecă muzicală</h2><span>MP3 · max. 20 MB</span></div>
+    <div class="panel-head"><h2>Bibliotecă muzicală</h2><span>MP3 · max. 200 MB · împărțire automată</span></div>
     <form data-form="audio-upload" class="upload-form">
       <input type="text" name="title" required maxlength="150" placeholder="Numele piesei sau ambientului">
       <input type="file" name="file" accept=".mp3,audio/mpeg,audio/mp3" required>
       <button type="submit" class="btn primary">Încarcă muzica</button>
     </form>
-    <p class="audio-hint">Folosește doar piese pentru care ai drepturi de difuzare în locație. Muzica se repetă pe imagini și se oprește în timpul reclamelor video.</p>
+    <p class="audio-hint">Poți încărca un MP3 de 128 MB sau până la 200 MB: Screenflow îl împarte automat în fișiere de aproximativ 44 MB, compatibile cu Supabase Free. Pe Samsung pot apărea scurte pauze între segmente. Folosește doar muzică pentru care ai drepturi de difuzare în locație.</p>
     <div class="audio-tracks">${tracks || '<p>Nicio piesă încărcată.</p>'}</div>
   </section>`;
 }
