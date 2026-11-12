@@ -5,6 +5,7 @@ import './tv-fleet.css';
 import { createAudioPlayback } from './audio-playback.js';
 import { renderAudioView } from './audio-admin.js';
 import { attachPortraitBackdrop } from './video-portrait.js';
+import { createPortraitVideoPoster } from './video-poster.js';
 import './video-portrait.css';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
@@ -141,7 +142,7 @@ async function startAdmin() {
     <section class="panel"><div class="panel-head"><h2>Ultimele materiale</h2><button data-nav="assets" class="text-link">Vezi toate ${icon('arrow',15)}</button></div>${state.assets.length?`<div class="recent">${state.assets.slice(0,4).map(a=>`<div class="recent-row"><span class="mini-preview">${a.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt=""/>`:`${icon('play',18)}`}</span><div><strong>${safe(a.title)}</strong><small>${a.kind==='image'?'Imagine':'Video'} · ${fmt(a.created_at)}</small></div><span class="pill ${a.enabled?'green':'gray'}">${a.enabled?'Activ':'Oprit'}</span></div>`).join('')}</div>`:empty('image','Biblioteca este goală','Încarcă prima reclamă pentru a începe.')}</section></div>`;
   }
   function assetsView(){
-    const cards=state.assets.map(a=>`<article class="asset-card"><div class="asset-cover">${a.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt="${safe(a.title)}" loading="lazy">`:`<video src="${safe(pubUrl(a.storage_path))}#t=0.2" preload="metadata" muted playsinline></video><span class="video-badge">${icon('play',14)} VIDEO</span>`}</div><div class="asset-body"><div class="asset-title"><strong title="${safe(a.title)}">${safe(a.title)}</strong><span class="pill ${a.enabled?'green':'gray'}">${a.enabled?'Activ':'Oprit'}</span></div><small>${a.kind.toUpperCase()} · ${fmt(a.created_at)}</small><form data-form="asset-edit" data-id="${a.id}" class="asset-form"><label>Durată (sec.)<input name="duration" type="number" min="3" max="3600" value="${a.duration_seconds}" required></label><label>Începe la<input name="starts" type="datetime-local" value="${inputDate(a.starts_at)}"></label><label>Se încheie la<input name="ends" type="datetime-local" value="${inputDate(a.ends_at)}"></label><div class="asset-buttons"><button class="btn small subtle" type="submit">Salvează</button><button class="btn small subtle" type="button" data-action="toggle-asset" data-id="${a.id}">${a.enabled?'Dezactivează':'Activează'}</button><button type="button" title="Șterge" class="icon-button danger" data-action="delete-asset" data-id="${a.id}">${icon('trash',17)}</button></div></form></div></article>`).join('');
+    const cards=state.assets.map(a=>`<article class="asset-card"><div class="asset-cover">${a.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt="${safe(a.title)}" loading="lazy">`:`<video src="${safe(pubUrl(a.storage_path))}#t=0.2" preload="metadata" muted playsinline></video><span class="video-badge">${icon('play',14)} VIDEO</span>`}</div><div class="asset-body"><div class="asset-title"><strong title="${safe(a.title)}">${safe(a.title)}</strong><span class="pill ${a.enabled?'green':'gray'}">${a.enabled?'Activ':'Oprit'}</span></div><small>${a.kind.toUpperCase()} · ${fmt(a.created_at)}</small><form data-form="asset-edit" data-id="${a.id}" class="asset-form"><label>Durată (sec.)<input name="duration" type="number" min="3" max="3600" value="${a.duration_seconds}" required></label><label>Începe la<input name="starts" type="datetime-local" value="${inputDate(a.starts_at)}"></label><label>Se încheie la<input name="ends" type="datetime-local" value="${inputDate(a.ends_at)}"></label><div class="asset-buttons"><button class="btn small subtle" type="submit">Salvează</button><button class="btn small subtle" type="button" data-action="toggle-asset" data-id="${a.id}">${a.enabled?'Dezactivează':'Activează'}</button>${a.kind==='video'?(a.blur_background_path?'<span class="pill green">Fundal blurat ✓</span>':`<button class="btn small subtle" type="button" data-action="generate-video-poster" data-id="${a.id}">Generează fundal</button>`):''}<button type="button" title="Șterge" class="icon-button danger" data-action="delete-asset" data-id="${a.id}">${icon('trash',17)}</button></div></form></div></article>`).join('');
     return heading('BIBLIOTECĂ MEDIA','Reclamele tale','Încarcă fotografii sau videoclipuri, apoi adaugă-le în playlisturi. Poți seta o perioadă de difuzare.')+`<section class="upload-panel"><div class="upload-visual">${icon('cloud',31)}</div><div><h2>Adaugă materiale noi</h2><p>JPEG, PNG, WebP sau MP4 (H.264 recomandat). Pentru început, folosește fișiere video sub 50 MB.</p><form data-form="upload" class="upload-form"><input type="text" name="title" placeholder="Numele reclamei" maxlength="150" required><input type="file" name="file" accept="image/jpeg,image/png,image/webp,video/mp4" required><button class="btn primary" type="submit">${icon('plus',17)} Încarcă</button></form></div></section><div class="section-heading"><h2>Toate materialele <span>${state.assets.length}</span></h2></div>${cards?`<div class="assets-grid">${cards}</div>`:empty('image','Nicio reclamă încă','Încarcă primul fișier ca să apară aici.')}`;
   }
   function playlistsView(){
@@ -186,12 +187,28 @@ async function startAdmin() {
         if(error)throw error;
       },'Piesa a fost ștearsă.');return;
     }
+    if(a==='generate-video-poster'){
+      const asset=state.assets.find(x=>x.id===id && x.kind==='video');if(!asset)return;
+      perform(async()=>{
+        const {data,error}=await supabase.storage.from('ads').download(asset.storage_path);
+        if(error)throw error;
+        const poster=await createPortraitVideoPoster(data);
+        if(!poster)throw new Error('Acest videoclip este orizontal, deci nu necesită fundal blurat.');
+        const path='backgrounds/'+crypto.randomUUID()+'.jpg';
+        const upload=await supabase.storage.from('ads').upload(path,poster,{
+          contentType:'image/jpeg',cacheControl:'3600',upsert:false
+        });
+        if(upload.error)throw upload.error;
+        try{await patch('assets',id,{blur_background_path:path});}
+        catch(e){await supabase.storage.from('ads').remove([path]);throw e;}
+      },'Fundalul blurat a fost generat pentru videoclip.');return;
+    }
     if(a==='copy-link'){const s=state.screens.find(s=>s.id===id); if(!s)return;const value=`${location.origin}/play/${s.public_id}`;try{await navigator.clipboard.writeText(value);toast('Linkul TV a fost copiat.');}catch{window.prompt('Copiază linkul:',value);}return;}
     if(a==='toggle-asset'){const o=state.assets.find(x=>x.id===id);if(o)perform(()=>patch('assets',id,{enabled:!o.enabled}),'Starea reclamei a fost schimbată.');return;}
     if(['delete-asset','delete-playlist','delete-screen','delete-location'].includes(a)){
       if(!confirm('Sigur vrei să ștergi acest element?'))return;
       const tab={'delete-asset':'assets','delete-playlist':'playlists','delete-screen':'screens','delete-location':'locations'}[a];
-      perform(async()=>{if(tab==='assets'){const asset=state.assets.find(x=>x.id===id);await remove('assets',id);if(asset)await supabase.storage.from('ads').remove([asset.storage_path]);}else await remove(tab,id);},'Element șters.');return;
+      perform(async()=>{if(tab==='assets'){const asset=state.assets.find(x=>x.id===id);await remove('assets',id);if(asset)await supabase.storage.from('ads').remove([asset.storage_path,asset.blur_background_path].filter(Boolean));}else await remove(tab,id);},'Element șters.');return;
     }
     if(['item-up','item-down','item-remove'].includes(a)){
       if(a==='item-remove'){perform(()=>remove('playlist_items',id),'Material eliminat din playlist.');return;}
@@ -276,10 +293,26 @@ async function startAdmin() {
       if(file.size>50*1024*1024){showError('Fișierul depășește 50 MB. Comprimă video sau mărește limita din Supabase.');return;}
       const path=`${crypto.randomUUID()}.${file.type==='video/mp4'?'mp4':file.type.split('/')[1]==='jpeg'?'jpg':file.type.split('/')[1]}`;
       perform(async()=>{
-        const {error}=await supabase.storage.from('ads').upload(path,file,{contentType:file.type,cacheControl:'3600',upsert:false});if(error)throw error;
-        try{await insert('assets',{title:name,storage_path:path,kind:file.type.startsWith('video/')?'video':'image',duration_seconds:10});}
-        catch(e){await supabase.storage.from('ads').remove([path]);throw e;}
-      },'Reclama a fost încărcată. Adaug-o într-un playlist.');
+        const poster=file.type==='video/mp4'?await createPortraitVideoPoster(file):null;
+        const posterPath=poster?'backgrounds/'+crypto.randomUUID()+'.jpg':null;
+        if(posterPath){
+          const posterUpload=await supabase.storage.from('ads').upload(posterPath,poster,{
+            contentType:'image/jpeg',cacheControl:'3600',upsert:false
+          });
+          if(posterUpload.error)throw posterUpload.error;
+        }
+        const {error}=await supabase.storage.from('ads').upload(path,file,{contentType:file.type,cacheControl:'3600',upsert:false});
+        if(error){
+          if(posterPath)await supabase.storage.from('ads').remove([posterPath]);
+          throw error;
+        }
+        try{await insert('assets',{
+          title:name,storage_path:path,
+          kind:file.type.startsWith('video/')?'video':'image',
+          blur_background_path:posterPath,duration_seconds:10
+        });}
+        catch(e){await supabase.storage.from('ads').remove([path,posterPath].filter(Boolean));throw e;}
+      },'Reclama a fost încărcată. Fundalul blurat se generează automat pentru video vertical.');
     }
   });
 }
@@ -336,7 +369,7 @@ function startPlayer(){
     } else if(a.kind==='video'){
       stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.src=url;
-       clearPortraitBackdrop=attachPortraitBackdrop(stage,video);
+       clearPortraitBackdrop=attachPortraitBackdrop(stage,video,a.blur_background_path?getUrl(a.blur_background_path):null);
       if(sync&&offset>0)video.onloadedmetadata=()=>{try{video.currentTime=Math.min(offset/1000,Math.max(0,video.duration-0.1));}catch{}};
       video.onended=()=>{if(my===token)next();};
       video.onerror=()=>{if(my===token)next();};
