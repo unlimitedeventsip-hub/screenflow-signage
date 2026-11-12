@@ -6,6 +6,8 @@ import { createAudioPlayback } from './audio-playback.js';
 import { renderAudioView } from './audio-admin.js';
 import { attachPortraitBackdrop } from './video-portrait.js';
 import { createPortraitVideoPoster } from './video-poster.js';
+import { uploadScreenflowAudio } from './audio-upload.js';
+import { splitMp3ForFreeStorage, MAX_AUDIO_BYTES } from './audio-chunks.js';
 import './video-portrait.css';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
@@ -51,7 +53,7 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'' };
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null };
   const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['locations','pin','Locații'] ];
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
@@ -127,7 +129,7 @@ async function startAdmin() {
     </aside><main class="main"><header class="topbar"><div class="crumb"><span>WORKSPACE</span><span>/</span><strong>${title}</strong></div><div class="top-actions"><span class="status"><b></b> ${state.fleetReady?'Monitorizare TV activă':'Control reclame'}</span><button class="btn subtle small" data-nav="screens">${icon('monitor',16)} Ecranele mele</button></div></header>
     <div class="content">${state.error?`<div class="alert">${safe(state.error)} <button data-action="dismiss-error">×</button></div>`:''}${content}</div></main>
     ${state.toast?`<div class="toast">${icon('check',17)} ${safe(state.toast)}</div>`:''}
-    ${state.busy?'<div class="busy"><div class="spinner"></div> Se procesează...</div>':''}</div>`;
+    ${state.busy?`<div class="busy"><div class="spinner"></div><span data-audio-progress>${state.audioUploadProgress===null?'Se procesează...':`Se încarcă muzica: ${state.audioUploadProgress}%`}</span></div>`:''}</div>`;
   }
   function heading(kicker,title,description,action='') {return `<div class="page-head"><div><div class="kicker">${kicker}</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`;}
   function overview(){
@@ -183,7 +185,7 @@ async function startAdmin() {
       const track=state.tracks.find(t=>t.id===id);if(!track)return;
       perform(async()=>{
         await remove('audio_tracks',id);
-        const {error}=await supabase.storage.from('ads').remove([track.storage_path]);
+        const {error}=await supabase.storage.from('ads').remove(Array.isArray(track.parts)&&track.parts.length?track.parts:[track.storage_path]);
         if(error)throw error;
       },'Piesa a fost ștearsă.');return;
     }
@@ -274,18 +276,38 @@ async function startAdmin() {
          !['audio/mpeg','audio/mp3','application/octet-stream',''].includes(file.type)){
         showError('Încarcă un fișier MP3 compatibil cu Samsung TV.');return;
       }
-      if(file.size>20*1024*1024){
-        showError('Piesa depășește 20 MB. Comprimă fișierul MP3.');return;
+      if(file.size>MAX_AUDIO_BYTES){
+        showError('Muzica depășește 200 MB. Încarcă un MP3 de maximum 200 MB.');return;
       }
-      const path='audio/'+crypto.randomUUID()+'.mp3';
+      state.audioUploadProgress=0;
       perform(async()=>{
-        const {error}=await supabase.storage.from('ads').upload(path,file,{
-          contentType:'audio/mpeg',cacheControl:'3600',upsert:false
-        });
-        if(error)throw error;
-        try{await insert('audio_tracks',{name,storage_path:path});}
-        catch(e){await supabase.storage.from('ads').remove([path]);throw e;}
-      },'Piesa a fost încărcată. Alege-o în setările playlistului.');return;
+        const parts=await splitMp3ForFreeStorage(file);
+        const uploaded=[];
+        try{
+          for(let i=0;i<parts.length;i++){
+            const part=parts[i];
+            const path='audio/'+crypto.randomUUID()+'-part'+String(i+1).padStart(2,'0')+'.mp3';
+            const before=uploaded.reduce((sum,x)=>sum+x.size,0);
+            await uploadScreenflowAudio({
+              supabase,projectUrl:URL,publicKey:KEY,file:part,path,
+              onProgress:percentage=>{
+                state.audioUploadProgress=Math.min(100,Math.round(100*(before+part.size*percentage/100)/file.size));
+                const label=document.querySelector('[data-audio-progress]');
+                if(label)label.textContent='Se încarcă muzica: '+state.audioUploadProgress+'% · partea '+(i+1)+'/'+parts.length;
+              }
+            });
+            uploaded.push({path,size:part.size});
+          }
+          await insert('audio_tracks',{
+            name,storage_path:uploaded[0].path,parts:uploaded.map(x=>x.path)
+          });
+        }catch(e){
+          if(uploaded.length)await supabase.storage.from('ads').remove(uploaded.map(x=>x.path));
+          throw e;
+        }finally{
+          state.audioUploadProgress=null;
+        }
+      },'Muzica a fost încărcată automat în segmente. Alege-o în setările playlistului.');return;
     }
     if(type==='upload'){
       const file=form.get('file'), name=val('title');if(!(file instanceof File)||!file.size||!name)return;
