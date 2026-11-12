@@ -58,3 +58,11 @@ returns jsonb language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.get_screen_manifest(uuid) from public, anon, authenticated;
 grant execute on function public.get_screen_manifest(uuid) to anon, authenticated;
+
+-- If the existing ads bucket has a MIME allowlist, include MP3 without
+-- removing any existing allowed media types. A NULL list already permits all.
+update storage.buckets
+set allowed_mime_types = array_append(allowed_mime_types, 'audio/mpeg')
+where id = 'ads'
+  and allowed_mime_types is not null
+  and not ('audio/mpeg' = any(allowed_mime_types));
