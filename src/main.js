@@ -293,7 +293,8 @@ function startPlayer(){
   let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="";
   const cacheKey=`screenflow:manifest:${publicId}`;
   const getUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
-  const standby=(msg='Conținutul va apărea în curând.')=>{stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
+  const audio=createAudioPlayback({stage,indicator,getUrl});
+  const standby=(msg='Conținutul va apărea în curând.')=>{audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
   const next=()=>{
     clearTimeout(timer);token++;
@@ -324,16 +325,17 @@ function startPlayer(){
     const url=getUrl(a.storage_path);
     if(a.kind==='image'){
       stage.innerHTML='<img class="tv-media" alt="" />';
+      audio.mediaChanged('image');
       const img=stage.querySelector('img');img.src=url;
       img.onerror=()=>{if(my===token)timer=setTimeout(next,1500);};
       timer=setTimeout(()=>{if(my===token)next();},remaining??duration(a));
     } else if(a.kind==='video'){
-      stage.innerHTML='<video class="tv-media" autoplay muted playsinline preload="auto"></video>';
-      const video=stage.querySelector('video');video.muted=true;video.src=url;
+      stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
+      const video=stage.querySelector('video');video.src=url;
       if(sync&&offset>0)video.onloadedmetadata=()=>{try{video.currentTime=Math.min(offset/1000,Math.max(0,video.duration-0.1));}catch{}};
       video.onended=()=>{if(my===token)next();};
       video.onerror=()=>{if(my===token)next();};
-      video.play().catch(()=>{if(my===token){indicator.textContent='Redarea video a fost blocată; verifică playerul TV.';timer=setTimeout(next,3000);}});
+      audio.prepareVideo(video).catch(()=>{if(my===token){indicator.textContent='Redarea video a fost blocată; verifică playerul TV.';timer=setTimeout(next,3000);}});
       timer=setTimeout(()=>{if(my===token)next();},remaining??60*60*1000);
     } else next();
   }
@@ -342,7 +344,8 @@ function startPlayer(){
       const {data,error}=await supabase.rpc('get_screen_manifest',{screen_public_id:publicId});
       if(error)throw error;
       if(!data){standby('Televizorul nu există. Verifică linkul din panoul admin.');indicator.textContent='Ecran necunoscut';return;}
-      const items=Array.isArray(data.items)?data.items:[];
+      audio.applySettings(data);
+       const items=Array.isArray(data.items)?data.items:[];
       try{localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));}catch{}
       indicator.textContent='';
       const now=Date.now(),stamp=Date.parse(data.server_time);
