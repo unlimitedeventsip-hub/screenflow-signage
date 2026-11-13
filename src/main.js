@@ -9,6 +9,7 @@ import { createPortraitVideoPoster } from './video-poster.js';
 import { readVideoDurationSeconds } from './video-duration.js';
 import { createOfflinePlaylist } from './offline-playlist.js';
 import { renderSmartModesAdmin, SMART_MODES } from './smart-modes-admin.js';
+import { renderInteractivePage } from './interactive-page.js';
 import { createSmartModePlayer } from './smart-modes-player.js';
 import './smart-modes-admin.css';
 import { uploadScreenflowAudio } from './audio-upload.js';
@@ -48,6 +49,11 @@ const icon = (name, size=19) => {
 
 if (!configured) {
   root.innerHTML = `<main class="setup-page"><div class="setup-card"><span class="brand-icon">${icon('monitor',28)}</span><p class="eyebrow">SCREENFLOW / SETUP</p><h1>Platforma este pregătită pentru configurare.</h1><p>Înainte de publicare, conectează proiectul Supabase folosind variabilele <code>VITE_SUPABASE_URL</code> și <code>VITE_SUPABASE_ANON_KEY</code>. Instrucțiunile complete sunt în README.md.</p><div class="setup-note">GitHub → Netlify → Supabase → reclame pe TV</div></div></main>`;
+} else if (location.pathname.startsWith('/join/')) {
+  const eventId=location.pathname.split('/')[2]||'';
+  if(/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(eventId))
+    renderInteractivePage({root,supabaseUrl:URL,eventId});
+  else root.innerHTML='<main class="player-empty"><h1>Link de eveniment invalid.</h1></main>';
 } else if (location.pathname==='/connect') {
   startConnect(supabase,root);
 } else if (isPlayer) {
@@ -58,7 +64,7 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[] };
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[] };
   const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Smart Modes'],['locations','pin','Locații'] ];
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
@@ -118,6 +124,12 @@ async function startAdmin() {
     state.smartItems=smart.data||[];
     const connections=await supabase.rpc('instagram_connection_status');
     state.instagramConnections=connections.data||[];
+    const [events,karaoke]=await Promise.all([
+      supabase.from('interactive_events').select('*').order('created_at',{ascending:false}).limit(100),
+      supabase.from('karaoke_queue').select('*').order('position').limit(150)
+    ]);
+    state.interactiveEvents=events.data||[];
+    state.karaokeQueue=karaoke.data||[];
     if(!state.smartLocation||!state.locations.some(x=>x.id===state.smartLocation))
       state.smartLocation=state.locations[0]?.id||null;
     await refreshDevices();
@@ -245,6 +257,23 @@ async function startAdmin() {
       }
       return;
     }
+    if(a==='interactive-stop'){
+      const ev=state.interactiveEvents.find(x=>x.id===id);if(!ev)return;
+      perform(()=>patch('interactive_events',id,{active:!ev.active}),
+       ev.active?'Evenimentul a fost oprit.':'Evenimentul a fost reactivat.');return;
+    }
+    if(a==='karaoke-call'){
+      const entry=state.karaokeQueue.find(x=>x.id===id);if(!entry)return;
+      perform(async()=>{
+        const previous=state.karaokeQueue.filter(x=>x.event_id===entry.event_id&&x.status==='called');
+        for(const q of previous)await patch('karaoke_queue',q.id,{status:'done'});
+        await patch('karaoke_queue',id,{status:'called'});
+      },'Cântărețul următor apare pe TV.');return;
+    }
+    if(a==='karaoke-skip'){
+      if(!state.karaokeQueue.some(x=>x.id===id))return;
+      perform(()=>patch('karaoke_queue',id,{status:'skipped'}),'Participant eliminat din lista activă.');return;
+    }
     if(a==='smart-select'){
       if(!SMART_MODES.some(x=>x[0]===id&&x[0]!=='ads'))return;
       state.smartMode=id;render();return;
@@ -314,6 +343,35 @@ async function startAdmin() {
     const f=e.target.closest('form[data-form]');if(!f)return;e.preventDefault();
     const type=f.dataset.form, id=f.dataset.id, form=new FormData(f), val=k=>String(form.get(k)||'').trim();
     if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else await validate();return;}
+    if(type==='interactive-new'){
+      const loc=val('location_id'),title=val('title'),kind=val('kind');
+      if(!state.locations.some(x=>x.id===loc)||!['vote','quiz','karaoke'].includes(kind)
+        ||title.length<3||title.length>150){showError('Titlu sau locație invalidă.');return;}
+      const options=val('options').split('\n').map(x=>x.trim()).filter(Boolean);
+      if(kind!=='karaoke'&&(options.length<2||options.length>8||
+        options.some(x=>x.length>100))){showError('Introdu între 2 și 8 variante de răspuns, fiecare de maximum 100 caractere.');return;}
+      const mode=kind==='karaoke'?'karaoke':'vote';
+      perform(async()=>{
+        const {data:ev,error:err}=await supabase.from('interactive_events').insert({
+          location_id:loc,title,kind,options:kind==='karaoke'?[]:options,active:true
+        }).select('id').single();
+        if(err)throw err;
+        try{
+          await insert('smart_items',{
+            location_id:loc,mode,title,subtitle:kind==='karaoke'?
+              'Scanează QR pentru înscriere':'Votează direct de pe telefon',
+            body:'Rezultatele se actualizează automat.',
+            post_url:location.origin+'/join/'+ev.id,
+            interactive_event_id:ev.id,
+            duration_seconds:30,sort_order:0,enabled:true
+          });
+          await patch('locations',loc,{display_mode:mode});
+        }catch(e){
+          await remove('interactive_events',ev.id).catch(()=>{});
+          throw e;
+        }
+      },'Evenimentul este activ. QR-ul apare pe ecranele locației.');return;
+    }
     if(type==='smart-location'){
       const locationId=val('location_id'),mode=val('display_mode');
       if(!state.locations.some(x=>x.id===locationId)||!SMART_MODES.some(x=>x[0]===mode))return;
