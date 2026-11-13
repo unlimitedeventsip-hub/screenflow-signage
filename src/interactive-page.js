@@ -87,5 +87,5 @@ export async function renderInteractivePage({root,supabaseUrl,eventId}){
  });
  await refresh();
  // Keep public vote counts and karaoke status current while the page is open.
- setInterval(()=>{if(!document.hidden)refresh();},20000);
+ setInterval(()=>{if(!document.hidden&&submitted)refresh();},20000);
 }
