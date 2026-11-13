@@ -59,3 +59,13 @@
 .agent-one-time{border:1px solid #bb9c62;background:#fff7e7;border-radius:10px;padding:15px;margin-top:13px}
 .agent-one-time strong{font-size:13px}
 @media(max-width:600px){.remote-control-form{grid-template-columns:1fr}}
+
+.diagnostic-screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.diagnostic-screen{border:1px solid #e3e8ee;border-radius:11px;padding:13px;display:grid;gap:7px}
+.diagnostic-screen strong{font-size:13px}
+.diagnostic-screen small{font-size:11px;color:#748697}
+.diagnostic-screen .pill{justify-self:start}
+.diagnostic-table-wrap{overflow-x:auto}
+.diagnostic-table{border-collapse:collapse;width:100%;font-size:11px}
+.diagnostic-table th,.diagnostic-table td{border-bottom:1px solid #e8edf2;padding:11px 8px;text-align:left}
+.diagnostic-table th{font-size:10px;letter-spacing:.06em;color:#7b8fa0}
