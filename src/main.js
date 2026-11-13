@@ -310,8 +310,8 @@ async function startAdmin() {
       if(postUrl){
         let u;try{u=new URL(postUrl);}catch{showError('Linkul nu este valid.');return;}
         if(u.protocol!=='https:'){showError('Folosește doar linkuri https.');return;}
-        if(mode==='instagram'&&(!/^(www\\.)?instagram\\.com$/i.test(u.hostname)||
-          !/^\\/(p|reel|reels|tv)\\/[A-Za-z0-9_-]+\\/?$/.test(u.pathname))){
+        if(mode==='instagram'&&(!/^(www\.)?instagram\.com$/i.test(u.hostname)||
+          !/^\/(p|reel|reels|tv)\/[A-Za-z0-9_-]+\/?$/.test(u.pathname))){
           showError('Introdu un link public Instagram către o postare sau un Reel.');return;
         }
       }
