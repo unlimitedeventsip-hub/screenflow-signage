@@ -17,3 +17,10 @@
 .smart-qr-image{width:100%;height:auto;aspect-ratio:1;display:block}.smart-qr small{font-size:clamp(8px,.8vw,13px);letter-spacing:.07em;font-weight:800;display:block;margin-top:7px}
 .smart-qr~.smart-copy{padding-bottom:180px}
 @media(max-aspect-ratio:1/1){.smart-stage{grid-template-columns:1fr;grid-template-rows:52% 48%}.smart-copy{padding:5vw}.smart-headline{font-size:8vw}.smart-qr{bottom:4vw}.smart-brand{display:none}}
+
+.smart-live-board{margin-top:1.4vw;border-top:1px solid #ffffff33;padding-top:1.2vw;width:100%;max-width:620px}
+.smart-live-board>strong{font-size:clamp(12px,1vw,19px);letter-spacing:.1em;color:#d8bb80}
+.smart-live-row{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:clamp(14px,1.3vw,25px);padding:6px 0;color:#e8edf3}
+.smart-live-row small{font-size:clamp(10px,1vw,17px);color:#aab8c5}
+.smart-live-progress{width:100%;height:8px;border-radius:10px;background:#455463;overflow:hidden}
+.smart-live-progress i{display:block;height:100%;background:#d8b879;border-radius:10px}
