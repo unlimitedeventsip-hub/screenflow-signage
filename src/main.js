@@ -8,6 +8,9 @@ import { attachPortraitBackdrop } from './video-portrait.js';
 import { createPortraitVideoPoster } from './video-poster.js';
 import { readVideoDurationSeconds } from './video-duration.js';
 import { createOfflinePlaylist } from './offline-playlist.js';
+import { renderSmartModesAdmin, SMART_MODES } from './smart-modes-admin.js';
+import { createSmartModePlayer } from './smart-modes-player.js';
+import './smart-modes-admin.css';
 import { uploadScreenflowAudio } from './audio-upload.js';
 import { splitMp3ForFreeStorage, MAX_AUDIO_BYTES } from './audio-chunks.js';
 import './video-portrait.css';
@@ -55,8 +58,8 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null };
-  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['locations','pin','Locații'] ];
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false };
+  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Smart Modes'],['locations','pin','Locații'] ];
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const fmt = date => date ? new Date(date).toLocaleDateString('ro-RO',{day:'2-digit',month:'short',year:'numeric'}) : '—';
@@ -110,6 +113,11 @@ async function startAdmin() {
     state.audioError = music.error?.message || '';
     state.tracks = music.data || [];
     if(!state.selectedPlaylist || !state.playlists.some(p=>p.id===state.selectedPlaylist)) state.selectedPlaylist=state.playlists[0]?.id||null;
+    const smart=await supabase.from('smart_items').select('*').order('sort_order').order('created_at');
+    state.smartReady=!smart.error;
+    state.smartItems=smart.data||[];
+    if(!state.smartLocation||!state.locations.some(x=>x.id===state.smartLocation))
+      state.smartLocation=state.locations[0]?.id||null;
     await refreshDevices();
   }
   async function validate() {
@@ -185,7 +193,7 @@ async function startAdmin() {
       <div class="location-schedule-list">${cards||empty('pin','Nicio locație','Adaugă prima locație.')}</div></section>`;
 }
   function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>DIGITAL SIGNAGE</small></div></div><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
-  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,screens:screensView,locations:locationsView})[state.view]?.()||overview());}
+  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),screens:screensView,locations:locationsView})[state.view]?.()||overview());}
   async function perform(op,success){state.busy=true;state.error='';render();try{await op();await load();state.busy=false;toast(success||'Modificările au fost salvate.');}catch(e){state.busy=false;showError(e.message);} }
   async function insert(table,record){const {error}=await supabase.from(table).insert(record);if(error)throw error;}
   async function patch(table,id,record){const {error}=await supabase.from(table).update(record).eq('id',id);if(error)throw error;}
@@ -201,6 +209,20 @@ async function startAdmin() {
       const tv=state.screens.find(x=>x.id===id);if(!tv)return;
       const record=a==='tv-reload'?{reload_requested_at:new Date().toISOString()}:{playback_enabled:a==='tv-resume'};
       perform(()=>patch('screens',id,record),a==='tv-reload'?'Cererea de reîncărcare a fost trimisă.':a==='tv-resume'?'Redarea este permisă; programul locației rămâne valabil.':'Redarea este pusă pe pauză.');
+      return;
+    }
+    if(a==='smart-select'){
+      if(!SMART_MODES.some(x=>x[0]===id&&x[0]!=='ads'))return;
+      state.smartMode=id;render();return;
+    }
+    if(a==='smart-toggle'){
+      const item=state.smartItems.find(x=>x.id===id);if(!item)return;
+      perform(()=>patch('smart_items',id,{enabled:!item.enabled}),item.enabled?'Material ascuns pe TV.':'Material activat pe TV.');
+      return;
+    }
+    if(a==='smart-delete'){
+      if(!state.smartItems.some(x=>x.id===id)||!confirm('Ștergi acest material din Smart Modes?'))return;
+      perform(()=>remove('smart_items',id),'Material eliminat din Smart Modes.');
       return;
     }
     if(a==='sync-toggle'){
@@ -248,10 +270,59 @@ async function startAdmin() {
       perform(async()=>{for(let i=0;i<arr.length;i++)await patch('playlist_items',arr[i].id,{position:i+1});},'Ordinea a fost modificată.');
     }
   });
+  root.addEventListener('change',e=>{
+    const input=e.target;
+    if(input?.name==='location_id'&&input.closest('form[data-form="smart-location"]')){
+      if(state.locations.some(x=>x.id===input.value)){state.smartLocation=input.value;render();}
+    }
+  });
   root.addEventListener('submit',async e=>{
     const f=e.target.closest('form[data-form]');if(!f)return;e.preventDefault();
     const type=f.dataset.form, id=f.dataset.id, form=new FormData(f), val=k=>String(form.get(k)||'').trim();
     if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else await validate();return;}
+    if(type==='smart-location'){
+      const locationId=val('location_id'),mode=val('display_mode');
+      if(!state.locations.some(x=>x.id===locationId)||!SMART_MODES.some(x=>x[0]===mode))return;
+      const handle=val('instagram_handle').replace(/^@/,'').trim();
+      if(handle&&!/^[A-Za-z0-9._]{1,30}$/.test(handle)){
+        showError('Instagram: utilizatorul poate conține doar litere, cifre, punct și underscore.');
+        return;
+      }
+      state.smartLocation=locationId;
+      perform(()=>patch('locations',locationId,{display_mode:mode,instagram_handle:handle}),
+        'Modul TV a fost actualizat pentru această locație.');return;
+    }
+    if(type==='smart-item'){
+      const loc=val('location_id'),mode=val('mode'),asset=val('asset_id')||null;
+      if(!state.locations.some(x=>x.id===loc)||
+         !SMART_MODES.some(x=>x[0]===mode&&mode!=='ads'))return;
+      const title=val('title'),postUrl=val('post_url'),handle=val('author_handle').replace(/^@/,'');
+      const dur=Number(val('duration_seconds')),order=Number(val('sort_order'));
+      const starts=val('starts_at'),ends=val('ends_at');
+      if(!title||title.length>150||!Number.isInteger(dur)||dur<3||dur>3600||
+         !Number.isInteger(order)||order<0||order>99999){showError('Titlul, durata sau poziția nu sunt valide.');return;}
+      if(starts&&ends&&new Date(ends)<=new Date(starts)){showError('Perioada afișării nu este validă.');return;}
+      if(handle&&!/^[A-Za-z0-9._]{1,30}$/.test(handle)){showError('Autorul Instagram are un format invalid.');return;}
+      if(mode==='instagram'&&!asset){
+        showError('Pentru a reda postări Instagram pe TV, adaugă întâi fotografia sau MP4 în Biblioteca media.');
+        return;
+      }
+      if(postUrl){
+        let u;try{u=new URL(postUrl);}catch{showError('Linkul nu este valid.');return;}
+        if(u.protocol!=='https:'){showError('Folosește doar linkuri https.');return;}
+        if(mode==='instagram'&&(!/^(www\\.)?instagram\\.com$/i.test(u.hostname)||
+          !/^\\/(p|reel|reels|tv)\\/[A-Za-z0-9_-]+\\/?$/.test(u.pathname))){
+          showError('Introdu un link public Instagram către o postare sau un Reel.');return;
+        }
+      }
+      perform(()=>insert('smart_items',{
+        location_id:loc,mode,title,subtitle:val('subtitle'),body:val('body'),
+        author_handle:handle,post_url:postUrl,asset_id:asset,
+        duration_seconds:dur,sort_order:order,
+        starts_at:starts?new Date(starts).toISOString():null,
+        ends_at:ends?new Date(ends).toISOString():null,enabled:true
+      }),'Materialul este aprobat și pregătit pentru TV.');return;
+    }
     if(type==='location-new'){if(val('name'))perform(()=>insert('locations',{name:val('name')}),'Locație adăugată.');return;}
     if(type==='location-schedule'){
       const open=val('open_time'),close=val('close_time');
