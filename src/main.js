@@ -64,7 +64,7 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[] };
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null };
   const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Smart Modes'],['locations','pin','Locații'] ];
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
@@ -130,6 +130,14 @@ async function startAdmin() {
     ]);
     state.interactiveEvents=events.data||[];
     state.karaokeQueue=karaoke.data||[];
+    const [controls,commands,agents]=await Promise.all([
+      supabase.from('tv_device_controls').select('*'),
+      supabase.from('tv_remote_commands').select('*').order('created_at',{ascending:false}).limit(120),
+      supabase.rpc('tv_control_agent_status')
+    ]);
+    state.controls=controls.data||[];
+    state.tvCommands=commands.data||[];
+    state.agentStatuses=agents.data||[];
     if(!state.smartLocation||!state.locations.some(x=>x.id===state.smartLocation))
       state.smartLocation=state.locations[0]?.id||null;
     await refreshDevices();
@@ -184,7 +192,31 @@ async function startAdmin() {
   }
   function audioView(){return renderAudioView({state,heading,safe,pubUrl});}
   function screensView(){
-    const rows=state.screens.map(s=>{const l=state.locations.find(l=>l.id===s.location_id);const p=state.playlists.find(p=>p.id===s.playlist_id);const link=`${location.origin}/play/${s.public_id}`;return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><select name="location">${selectOptions(state.locations,s.location_id,'Fără locație')}</select><button type="submit" class="btn small subtle">Actualizează</button></form>${screenInfo(s)}<div class="screen-controls"><button type="button" class="btn small ${s.playback_enabled?"subtle":"primary"}" data-action="tv-resume" data-id="${s.id}">Pornește redarea</button><button type="button" class="btn small subtle" data-action="tv-pause" data-id="${s.id}">Pauză</button><button type="button" class="btn small subtle" data-action="tv-reload" data-id="${s.id}">Reîncarcă</button></div><small class="screen-controls-note">Aceste comenzi funcționează când playerul Screenflow poate primi date. Nu aprind fizic televizorul.</small><div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
+    const rows=state.screens.map(s=>{const l=state.locations.find(l=>l.id===s.location_id);const p=state.playlists.find(p=>p.id===s.playlist_id);const link=`${location.origin}/play/${s.public_id}`;
+      const control=state.controls.find(x=>x.screen_id===s.id);
+      const lastCmd=state.tvCommands.find(x=>x.screen_id===s.id);
+      const agent=state.agentStatuses.find(x=>x.location_id===s.location_id);
+      const agentOnline=agent?.last_seen_at&&Date.now()-new Date(agent.last_seen_at).getTime()<60000;
+      return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><select name="location">${selectOptions(state.locations,s.location_id,'Fără locație')}</select><button type="submit" class="btn small subtle">Actualizează</button></form>${screenInfo(s)}<div class="screen-controls"><button type="button" class="btn small ${s.playback_enabled?"subtle":"primary"}" data-action="tv-resume" data-id="${s.id}">Pornește redarea</button><button type="button" class="btn small subtle" data-action="tv-pause" data-id="${s.id}">Pauză</button><button type="button" class="btn small subtle" data-action="tv-reload" data-id="${s.id}">Reîncarcă</button></div><small class="screen-controls-note">Comenzile de mai sus controlează playerul web. Pentru aplicații închise / pornire fizică trebuie agentul local.</small>
+      <div class="remote-panel">
+        <small>Agent local: ${agentOnline?'ONLINE':agent?'FĂRĂ RĂSPUNS':'NEASOCIAT'} ${lastCmd?' · Ultima comandă: '+safe(lastCmd.action)+' ('+safe(lastCmd.status)+')':''}</small>
+        <form data-form="device-control" data-id="${s.id}" class="remote-control-form">
+          <input name="control_ip" aria-label="Adresă IP TV" placeholder="IP local TV" maxlength="45" value="${safe(control?.control_ip||'')}">
+          <input name="control_mac" aria-label="Adresă MAC TV" placeholder="MAC TV" maxlength="18" value="${safe(control?.control_mac||'')}">
+          <select name="control_type" aria-label="Protocol de control">
+            <option value="android_adb" ${!control||control.control_type==='android_adb'?'selected':''}>Android ADB</option>
+            <option value="wol_only" ${control?.control_type==='wol_only'?'selected':''}>Wake-on-LAN</option>
+            <option value="samsung_remote" ${control?.control_type==='samsung_remote'?'selected':''}>Samsung (în dezvoltare)</option>
+          </select>
+          <button type="submit" class="btn small subtle">Salvează dispozitiv</button>
+        </form>
+        <div class="remote-control-buttons">
+          <button type="button" class="btn small subtle" data-action="remote-wake" data-id="${s.id}">Trezește TV</button>
+          <button type="button" class="btn small subtle" data-action="remote-launch" data-id="${s.id}">Lansează aplicația</button>
+          <button type="button" class="btn small subtle" data-action="remote-standby" data-id="${s.id}">Standby</button>
+        </div>
+      </div>
+      <div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
     return heading('DISTRIBUȚIE','Televizoare','Aplicațiile TV apar automat. Confirmă codul de pe ecran, alege locația și playlistul.')+fleetSummary()+pendingPanel()+`<section class="panel tv-bulk"><h2>Playlist comun pentru locație</h2><form data-form="tv-bulk" class="tv-bulk-form"><select name="location_id" required>${selectOptions(state.locations,null,'Locația')}</select><select name="playlist_id" required>${selectOptions(state.playlists,null,'Playlistul')}</select><button class="btn primary" type="submit">Aplică la toate TV-urile</button></form><p>Exemplu: toate cele 5 TV de la #altfel Unirii vor primi același playlist.</p></section><details class="panel tv-legacy"><summary>Adăugare manuală (doar pentru browsere vechi)</summary><section class="create-screen"><div><h2>Conectează un televizor nou</h2><p>Adaugă-l, copiază linkul și deschide-l pe TV.</p></div><form data-form="screen-new" class="screen-form"><input name="name" placeholder="Ex.: TV Bar 1" required maxlength="100"><select name="location_id">${selectOptions(state.locations,null,'Alege locația')}</select><select name="playlist_id">${selectOptions(state.playlists,null,'Alege playlistul')}</select><button class="btn primary" type="submit">${icon('plus',16)} Adaugă ecran</button></form></section></details><div class="section-heading"><h2>Ecranele tale <span>${state.screens.length}</span></h2></div>${rows?`<div class="screens-grid">${rows}</div>`:empty('monitor','Niciun ecran adăugat','Configurează un televizor folosind formularul de mai sus.')}`;
   }
   function locationsView(){
@@ -204,7 +236,19 @@ async function startAdmin() {
     return heading('ORGANIZARE','Locații','Programează automat redarea reclamelor pe ore. Televizorul trebuie să fie pornit și aplicația activă.')+
       `<section class="panel location-panel"><div class="panel-head"><h2>Adaugă locație</h2></div>
       <form data-form="location-new" class="stack-form"><input name="name" placeholder="Ex.: #altfel ParkLake" maxlength="100" required><button class="btn primary" type="submit">${icon('plus',16)} Creează locație</button></form>
-      <div class="location-schedule-list">${cards||empty('pin','Nicio locație','Adaugă prima locație.')}</div></section>`;
+      <div class="location-schedule-list">${cards||empty('pin','Nicio locație','Adaugă prima locație.')}</div>
+      <div class="location-agents"><h3>Controlere locale (Wake-on-LAN / ADB)</h3>
+      <p>Este necesar un mini-PC sau Raspberry Pi pornit în fiecare locație. Fără acesta, comenzile de pornire fizică nu pot fi executate.</p>
+      ${state.locations.map(loc=>{
+        const agent=state.agentStatuses.find(x=>x.location_id===loc.id);
+        const online=agent?.last_seen_at&&Date.now()-new Date(agent.last_seen_at).getTime()<60000;
+        return '<div class="agent-location-row"><strong>'+safe(loc.name)+'</strong><small>'+
+          (online?'Agent ONLINE':agent?'Agent fără răspuns':'Fără agent asociat')+
+          '</small><button class="btn small subtle" type="button" data-action="agent-pair" data-id="'+loc.id+'">'+
+          (agent?'Reconfigurează agentul':'Asociază agent')+'</button></div>';
+      }).join('')}
+      ${state.agentPairInfo?'<div class="agent-one-time"><strong>Cheia agentului — afișată o singură dată</strong><p>Descarcă fișierul de configurare și transferă-l în siguranță pe mini-PC. Reasocierea invalidează cheia veche.</p><button type="button" class="btn primary small" data-action="agent-download">Descarcă screenflow-agent.json</button></div>':''}
+      <p><a href="https://github.com/unlimitedeventsip-hub/screenflow-signage/tree/main/agent" target="_blank" rel="noopener noreferrer">Instrucțiuni pentru instalarea agentului</a></p></div></section>`;
 }
   function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>DIGITAL SIGNAGE</small></div></div><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
   function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),screens:screensView,locations:locationsView})[state.view]?.()||overview());}
@@ -255,6 +299,40 @@ async function startAdmin() {
       }catch(err){
         state.busy=false;showError(err.message||'Eroare Instagram.');
       }
+      return;
+    }
+    if(a==='agent-pair'){
+      const loc=state.locations.find(x=>x.id===id);if(!loc)return;
+      if(!confirm('Generezi o cheie nouă pentru agentul din '+loc.name+'? Cheia precedentă nu va mai funcționa.'))return;
+      perform(async()=>{
+        const {data,error}=await supabase.rpc('pair_tv_control_agent',{p_location_id:id});
+        if(error||!data?.secret)throw error||new Error('Agentul nu a putut fi creat');
+        state.agentPairInfo={...data,location_id:id};
+      },'Agent generat. Descarcă acum configurația.');return;
+    }
+    if(a==='agent-download'){
+      const pair=state.agentPairInfo;if(!pair)return;
+      const file=JSON.stringify({
+        supabase_url:URL,anon_key:KEY,
+        agent_id:pair.agent_id,agent_secret:pair.secret,
+        adb_path:'adb',poll_seconds:12
+      },null,2);
+      const blob=new Blob([file],{type:'application/json'});
+      const href=window.URL.createObjectURL(blob);
+      const link=document.createElement('a');link.href=href;
+      link.download='screenflow-agent.json';
+      document.body.appendChild(link);link.click();link.remove();
+      setTimeout(()=>window.URL.revokeObjectURL(href),1000);
+      return;
+    }
+    if(['remote-wake','remote-launch','remote-standby'].includes(a)){
+      const tv=state.screens.find(x=>x.id===id);
+      if(!tv||!state.controls.some(x=>x.screen_id===id)){
+        showError('Configurează IP/MAC și protocolul televizorului înainte de comandă.');return;
+      }
+      const action=a.replace('remote-','');
+      perform(()=>insert('tv_remote_commands',{screen_id:id,action}),
+        'Comanda a fost pusă în coadă. Agentul local o va executa dacă este online și autorizat.');
       return;
     }
     if(a==='interactive-stop'){
@@ -343,6 +421,23 @@ async function startAdmin() {
     const f=e.target.closest('form[data-form]');if(!f)return;e.preventDefault();
     const type=f.dataset.form, id=f.dataset.id, form=new FormData(f), val=k=>String(form.get(k)||'').trim();
     if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else await validate();return;}
+    if(type==='device-control'){
+      if(!state.screens.some(x=>x.id===id))return;
+      const ip=val('control_ip'),mac=val('control_mac'),protocol=val('control_type');
+      if(!['android_adb','wol_only','samsung_remote'].includes(protocol)){
+        showError('Protocol invalid');return;
+      }
+      if(!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip) ||!/^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/.test(mac)){
+        showError('Completează IP-ul local și MAC-ul în formatul corect.');return;
+      }
+      perform(async()=>{
+        const {error}=await supabase.from('tv_device_controls').upsert({
+          screen_id:id,control_ip:ip,control_mac:mac,control_type:protocol,enabled:true,
+          updated_at:new Date().toISOString()
+        },{onConflict:'screen_id'});
+        if(error)throw error;
+      },'Controlul local al televizorului a fost configurat.');return;
+    }
     if(type==='interactive-new'){
       const loc=val('location_id'),title=val('title'),kind=val('kind');
       if(!state.locations.some(x=>x.id===loc)||!['vote','quiz','karaoke'].includes(kind)
