@@ -39,6 +39,24 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
       '<button type="button" class="btn small subtle" data-action="smart-toggle" data-id="'+safe(item.id)+'">'+(item.enabled?'Ascunde':'Activează')+'</button>'+
       '<button type="button" class="icon-button danger" title="Șterge" data-action="smart-delete" data-id="'+safe(item.id)+'">✕</button></article>';
   }).join('');
+  const instagram=state.instagramConnections?.find(x=>x.location_id===loc.id);
+  const igPanel='<section class="panel instagram-connect-panel">'+
+    '<div class="panel-head"><h2>Instagram · Sincronizare automată</h2>'+
+    '<span>'+(instagram?(instagram.enabled?'CONT CONECTAT':'PAUZĂ'):'NECONECTAT')+'</span></div>'+
+    '<p class="smart-hint">Conectează oficial contul Business/Creator pentru import automat al postărilor și Reel-urilor în Screenflow. Nu trebuie să mai încarci manual fișierele.</p>'+
+    '<div class="instagram-connect-status">'+(instagram?
+      '<strong>@'+safe(instagram.username)+'</strong>'+
+      '<small>Importate: '+Number(instagram.imported_count||0)+
+      ' · Ultima verificare: '+(instagram.last_synced_at?new Date(instagram.last_synced_at).toLocaleString('ro-RO'):'niciodată')+'</small>'+
+      (instagram.last_error?'<small class="instagram-error">'+safe(instagram.last_error)+'</small>':'')+
+      '<small>Import automat: '+(instagram.auto_publish?'Activ':'Doar pregătire, fără afișare')+'</small>':
+      '<strong>Fără cont Instagram conectat</strong><small>Este necesară autorizarea titularului o singură dată, apoi tokenul se reînnoiește automat cât timp este valid.</small>')+
+    '</div><div class="instagram-connect-actions">'+
+      '<button type="button" class="btn primary small" data-action="instagram-connect" data-id="'+safe(loc.id)+'">'+(instagram?'Reconectează Instagram':'Conectează Instagram')+'</button>'+
+      (instagram?'<button type="button" class="btn subtle small" data-action="instagram-sync" data-id="'+safe(loc.id)+'">Importă acum</button>'+
+        '<button type="button" class="btn subtle small" data-action="instagram-autopublish" data-id="'+safe(loc.id)+'">'+(instagram.auto_publish?'Oprește publicarea automată':'Activează publicarea automată')+'</button>'+
+        '<button type="button" class="btn subtle small" data-action="instagram-disconnect" data-id="'+safe(loc.id)+'">Deconectează</button>':'')+
+      '</div></section>';
   const current=SMART_MODES.find(x=>x[0]===loc.display_mode)||SMART_MODES[0];
   return heading('SMART MODES','Experiențe pe TV',
     'Reclame, meniuri, petreceri, Instagram, karaoke și mesaje. Fiecare locație poate avea propriul mod de afișare.')+
@@ -53,6 +71,7 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
         '<button class="btn primary" type="submit">Aplică modul</button>'+
       '</form><p class="smart-hint">Mod activ: <strong>'+safe(current[1])+
       '</strong>. Comenzile ajung pe TV-ul online la următoarea actualizare (circa 15 secunde). Dacă modul nu are materiale aprobate, rulează playlistul obișnuit.</p></section>'+
+    igPanel+
     '<section class="panel smart-library"><div class="panel-head"><h2>Conținut pentru moduri</h2><span>POSTĂRI APROBATE</span></div>'+
       '<div class="smart-mode-grid">'+MODE_GROUP.map(m=>
         '<button type="button" data-action="smart-select" data-id="'+safe(m[0])+
