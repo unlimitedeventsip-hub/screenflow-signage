@@ -1,0 +1,19 @@
+/* TV-ready Smart Modes, no external fonts or third-party media embedding */
+.smart-stage{width:100%;height:100%;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,55%) minmax(0,45%);background:#0d1722;color:#fff;position:relative;isolation:isolate;overflow:hidden;font-family:Manrope,'DM Sans',sans-serif}
+.smart-background{position:absolute;inset:0;z-index:-1;background:radial-gradient(circle at 70% 35%,#b58b4644,transparent 58%),linear-gradient(120deg,#11212d,#0a111b)}
+.smart-media-panel{height:100%;min-width:0;background:linear-gradient(120deg,#263847,#0c1520);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.smart-media-panel .smart-photo,.smart-media-panel .smart-media-video{width:100%;height:100%;object-fit:contain;display:block}
+.smart-stage-photo_wall .smart-photo,.smart-stage-menu .smart-photo,.smart-stage-happy_hour .smart-photo{object-fit:cover}
+.smart-art{font-size:clamp(28px,4vw,78px);font-weight:800;letter-spacing:-.05em;color:#f2e4cb}
+.smart-art span,.smart-brand span{color:#d1ad6a}
+.smart-copy{display:flex;flex-direction:column;justify-content:center;min-width:0;padding:clamp(30px,5vw,95px);padding-right:clamp(30px,5vw,90px);position:relative}
+.smart-eyebrow{font-size:clamp(12px,1.3vw,22px);letter-spacing:.2em;color:#d9bd80;font-weight:800;margin-bottom:clamp(14px,2vw,40px)}
+.smart-headline{font-size:clamp(28px,4.2vw,88px);line-height:1.05;font-weight:800;letter-spacing:-.05em;margin:0;overflow-wrap:anywhere}
+.smart-subtitle{font-size:clamp(18px,2vw,34px);line-height:1.35;color:#e8c68e;margin:clamp(13px,1.8vw,35px) 0}
+.smart-slide-body{font-size:clamp(15px,1.3vw,26px);line-height:1.5;color:#bdc8d4;max-width:95%;overflow-wrap:anywhere}
+.smart-handle{font-size:clamp(18px,1.6vw,30px);font-weight:750;color:#e8bf76;margin-top:1.5vw}
+.smart-brand{font-size:clamp(13px,1.2vw,22px);font-weight:800;color:#e4e8ee;letter-spacing:-.05em;margin-top:clamp(20px,4vw,78px)}
+.smart-qr{position:absolute;right:clamp(18px,3vw,65px);bottom:clamp(15px,3vw,60px);width:clamp(94px,10vw,185px);border-radius:12px;padding:11px;background:#fff;box-shadow:0 12px 35px #0008;color:#182737;text-align:center}
+.smart-qr-image{width:100%;height:auto;aspect-ratio:1;display:block}.smart-qr small{font-size:clamp(8px,.8vw,13px);letter-spacing:.07em;font-weight:800;display:block;margin-top:7px}
+.smart-qr~.smart-copy{padding-bottom:180px}
+@media(max-aspect-ratio:1/1){.smart-stage{grid-template-columns:1fr;grid-template-rows:52% 48%}.smart-copy{padding:5vw}.smart-headline{font-size:8vw}.smart-qr{bottom:4vw}.smart-brand{display:none}}
