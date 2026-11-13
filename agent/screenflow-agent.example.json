@@ -1,0 +1,8 @@
+{
+  "supabase_url": "https://asixkabhesmhbqunxqby.supabase.co",
+  "anon_key": "Copiază cheia publică/publishable din Supabase API Settings (nu service_role)",
+  "agent_id": "ID-ul agentului generat din Screenflow Admin",
+  "agent_secret": "Tokenul random de 64 caractere afișat o singură dată în Admin",
+  "adb_path": "adb",
+  "poll_seconds": 12
+}
