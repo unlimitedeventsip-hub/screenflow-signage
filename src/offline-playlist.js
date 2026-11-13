@@ -10,7 +10,9 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   let lastKey='',lastAttempt=0,pending=null;
   let status='Pregătire offline…';
   const setStatus=s=>{if(s!==status){status=s;onStatus(s);}};
-  const supported=typeof caches!=='undefined'&&typeof fetch==='function'&&'serviceWorker' in navigator;
+  const supported=typeof caches!=='undefined'&&typeof fetch==='function';
+  const hasWorker='serviceWorker' in navigator;
+  let blobUrls=new Map();
   const mediaPaths=manifest=>{
     const paths=[];
     for(const item of (Array.isArray(manifest?.items)?manifest.items:[])) {
@@ -34,7 +36,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   // Service worker caches HTML and versioned JS/CSS, so the player itself
   // can restart after a network outage, not only continue an open page.
   async function register(){
-    if(!('serviceWorker' in navigator)) {
+    if(!hasWorker) {
       setStatus('Offline: browserul nu acceptă service worker');
       return false;
     }
@@ -64,14 +66,18 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
 
   function mediaUrl(path) {
     const upstream=validUrl(path);
-    if(supported&&navigator.serviceWorker.controller&&readyPaths.has(upstream)){
+    if(blobUrls.has(upstream))return blobUrls.get(upstream);
+    if(supported&&hasWorker&&navigator.serviceWorker.controller&&readyPaths.has(upstream)){
       return '/offline-media?src='+encodeURIComponent(upstream);
     }
     return upstream;
   }
   async function warm(manifest, serverOffset=0) {
     if(!supported) {setStatus('Offline indisponibil pe acest TV');return false;}
-    if(!(await swReady)){setStatus('Nu s-a putut activa stocarea offline pe acest TV');return false;}
+    const swRegistered=await swReady;
+    // CacheStorage also works in some TV browsers without Service Workers.
+    // In those environments a running player can use temporary blob: URLs.
+    if(!swRegistered)setStatus('Salvare media locală, fără relansare offline garantată');
     const paths=mediaPaths(manifest),fingerprint=JSON.stringify(paths);
     if(pending)return pending;
     if(fingerprint===lastKey && Date.now()-lastAttempt<RETRY_MS)return false;
@@ -124,6 +130,28 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
     })();
     try{return await pending;}finally{pending=null;}
   }
+  async function prepareOfflineMedia(manifest){
+    if(!supported)return false;
+    const paths=mediaPaths(manifest);
+    // Clear previous object URLs before creating a new offline session.
+    for(const url of blobUrls.values())URL.revokeObjectURL(url);
+    blobUrls=new Map();
+    const cache=await caches.open(MEDIA_CACHE);
+    for(const path of paths){
+      const upstream=validUrl(path);
+      const hit=await cache.match(upstream);
+      if(!hit||hit.status!==200){
+        for(const url of blobUrls.values())URL.revokeObjectURL(url);
+        blobUrls=new Map();
+        return false;
+      }
+      const blob=await hit.blob();
+      if(!blob.size)return false;
+      blobUrls.set(upstream,URL.createObjectURL(blob));
+    }
+    setStatus('OFFLINE · '+paths.length+' fișiere locale pregătite');
+    return true;
+  }
   async function localBlob(path) {
     if(!supported)return null;
     try{
@@ -136,5 +164,5 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
     return null;
   }
   function currentStatus(){return status;}
-  return {swReady,warm,saved,localBlob,mediaUrl,currentStatus};
+  return {swReady,warm,saved,localBlob,prepareOfflineMedia,mediaUrl,currentStatus};
 }
