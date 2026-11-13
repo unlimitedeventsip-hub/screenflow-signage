@@ -7,6 +7,7 @@ import { renderAudioView } from './audio-admin.js';
 import { attachPortraitBackdrop } from './video-portrait.js';
 import { createPortraitVideoPoster } from './video-poster.js';
 import { readVideoDurationSeconds } from './video-duration.js';
+import { createOfflinePlaylist } from './offline-playlist.js';
 import { uploadScreenflowAudio } from './audio-upload.js';
 import { splitMp3ForFreeStorage, MAX_AUDIO_BYTES } from './audio-chunks.js';
 import './video-portrait.css';
@@ -384,7 +385,13 @@ function startPlayer(){
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
   let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null, videoProblem='';
   const cacheKey=`screenflow:manifest:${publicId}`;
-  const getUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
+  const upstreamUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
+  const offline=createOfflinePlaylist({publicId,getUrl:upstreamUrl,onStatus:message=>{
+    if(!indicator.textContent || indicator.textContent.startsWith('Offline:') || indicator.textContent.startsWith('Salvare offline:'))indicator.textContent=message;
+  }});
+  const getUrl=path=>{
+    try{return offline.mediaUrl(path);}catch{return upstreamUrl(path);}
+  };
   const audio=createAudioPlayback({stage,indicator,getUrl});
   let clearPortraitBackdrop=()=>{};
   const standby=(msg='Conținutul va apărea în curând.')=>{clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
@@ -450,51 +457,95 @@ function startPlayer(){
       timer=setTimeout(()=>{if(my===token)next();},remaining??60*60*1000);
     } else next();
   }
+  function offlineScheduleOpen(data){
+    if(!data.schedule_enabled)return true;
+    const open=String(data.schedule_open_time||'15:00').slice(0,5);
+    const close=String(data.schedule_close_time||'02:00').slice(0,5);
+    let now;
+    try {
+      const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Bucharest',
+        hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+      const hour=parts.find(p=>p.type==='hour')?.value||'00';
+      const minute=parts.find(p=>p.type==='minute')?.value||'00';
+      now=hour+':'+minute;
+    }catch {
+      const date=new Date();
+      now=String(date.getHours()).padStart(2,'0')+':'+String(date.getMinutes()).padStart(2,'0');
+    }
+    if(open===close)return true;
+    return open<close?(now>=open&&now<close):(now>=open||now<close);
+  }
+  function applyManifest(data,isOffline=false) {
+    if(!data){standby('Televizorul nu există. Verifică linkul din panoul admin.');indicator.textContent='Ecran necunoscut';return;}
+    if(!isOffline){
+      const reload=String(data.reload_requested_at||'');
+      if(lastReloadCommand===null)lastReloadCommand=reload;
+      else if(reload && reload!==lastReloadCommand){location.reload();return;}
+    }
+    const allowed=data.playback_enabled!==false
+      &&(isOffline?offlineScheduleOpen(data):data.schedule_open!==false);
+    if(!allowed){
+      if(!blocked){
+        blocked=true;clearTimeout(timer);token++;
+        const video=stage.querySelector('video');if(video)video.pause();
+        standby(data.playback_enabled===false?'Redare pusă pe pauză din Admin.':'În afara programului locației.');
+        indicator.textContent=data.playback_enabled===false?'PAUZĂ DIN ADMIN':'PROGRAM ÎNCHIS';
+      }
+      return;
+    }
+    if(blocked){blocked=false;first=true;signature='';current=[];pending=null;index=0;}
+    audio.applySettings(data);
+    const items=Array.isArray(data.items)?data.items:[];
+    if(!isOffline){
+      try{localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));}catch{}
+    }
+    if(!isOffline)indicator.textContent='';
+    const newSync=Boolean(data.synchronized&&data.sync_anchor),newAnchor=Date.parse(data.sync_anchor||'');
+    const newSignature=JSON.stringify({items,newSync,anchor:data.sync_anchor});
+    if(first||newSignature!==signature){
+      const wasFirst=first;first=false;signature=newSignature;sync=newSync;
+      syncAnchor=Number.isFinite(newAnchor)?newAnchor:0;
+      if(sync){current=items;pending=null;align(true);}
+      else if(wasFirst||!current.length){current=items;index=0;play();}
+      else pending=items;
+    }else if(sync)align();
+  }
   async function refresh(){
-    try{
+    try {
       const {data,error}=await supabase.rpc('get_screen_manifest',{screen_public_id:publicId});
       if(error)throw error;
-      if(data){
-        const reload=String(data.reload_requested_at||'');
-        if(lastReloadCommand===null)lastReloadCommand=reload;
-        else if(reload && reload!==lastReloadCommand){location.reload();return;}
-        const enabled=data.playback_enabled!==false && data.schedule_open!==false;
-        if(!enabled){
-          if(!blocked){
-            blocked=true;clearTimeout(timer);token++;
-            const video=stage.querySelector('video');if(video)video.pause();
-            standby(data.playback_enabled===false?'Redare pusă pe pauză din Admin.':'În afara programului locației.');
-            indicator.textContent=data.playback_enabled===false?'PAUZĂ DIN ADMIN':'PROGRAM ÎNCHIS';
-          }
-          return;
-        }
-        if(blocked){blocked=false;first=true;signature='';current=[];pending=null;index=0;}
-      }
-      if(!data){standby('Televizorul nu există. Verifică linkul din panoul admin.');indicator.textContent='Ecran necunoscut';return;}
-      audio.applySettings(data);
-       const items=Array.isArray(data.items)?data.items:[];
-      try{localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));}catch{}
-      indicator.textContent='';
-      const now=Date.now(),stamp=Date.parse(data.server_time);
+      const now=Date.now(),stamp=Date.parse(data?.server_time);
       if(Number.isFinite(stamp))syncOffset=stamp-now;
-      const newSync=Boolean(data.synchronized && data.sync_anchor),newAnchor=Date.parse(data.sync_anchor||'');
-      const newSignature=JSON.stringify({items,newSync,anchor:data.sync_anchor});
-      if(first||newSignature!==signature){
-        const wasFirst=first;first=false;signature=newSignature;sync=newSync;syncAnchor=Number.isFinite(newAnchor)?newAnchor:0;
-        if(sync){current=items;pending=null;align(true);}
-        else if(wasFirst||!current.length){current=items;index=0;play();}
-        else pending=items;
-      }else if(sync)align();
+      applyManifest(data);
+      // Cache complete media after rendering begins; no partial playlist replaces
+      // the previous offline version if a download fails.
+      if(data&&data.playback_enabled!==false){
+        offline.warm(data,syncOffset).catch(e=>console.warn('Offline cache',e?.message));
+      }
     }catch(e){
-      indicator.textContent='Conexiune indisponibilă · se reîncearcă';
-      if(first){try{const saved=JSON.parse(localStorage.getItem(cacheKey));if(saved?.items?.length){current=saved.items;first=false;play();}else standby('Așteptăm conexiunea la internet...');}catch{standby('Așteptăm conexiunea la internet...');}}
+      const stored=offline.saved();
+      if(stored?.manifest){
+        syncOffset=Number(stored.serverOffset)||0;
+        applyManifest(stored.manifest,true);
+        if(!blocked)indicator.textContent='OFFLINE · Redare din memoria TV';
+      }else {
+        indicator.textContent='Internet indisponibil · nu avem încă un playlist salvat integral';
+        if(first){
+          try{
+            const older=JSON.parse(localStorage.getItem(cacheKey));
+            if(older?.items?.length){
+              current=older.items;first=false;play();
+            }else standby('Așteptăm conexiunea la internet...');
+          }catch{standby('Așteptăm conexiunea la internet...');}
+        }
+      }
     }
   }
   let reporting=false;
   async function heartbeat(){
     if(reporting)return;reporting=true;
     try{
-      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':current.length?'playing':'waiting'),error:videoProblem});
+      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':current.length?'playing':'waiting'),error:videoProblem||offline.currentStatus()});
       if(r?.status==='pending')location.replace('/connect');
       if(r?.status==='approved' && r.screen_public_id && r.screen_public_id!==publicId)location.replace('/play/'+r.screen_public_id);
     }catch(e){console.warn('TV heartbeat',e?.message)}
