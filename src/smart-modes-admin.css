@@ -39,3 +39,9 @@
 .interactive-karaoke-row>div{flex:1}
 .interactive-karaoke-row strong{font-size:12px}
 .interactive-karaoke-row small{font-size:11px;display:block;margin-top:4px;color:#8f9bad}
+
+.smart-weekdays{grid-column:1/-1;display:grid;gap:8px;border:1px solid #e0e7ed;padding:10px;border-radius:9px}
+.smart-weekdays>strong{font-size:11px;color:#6d7b89}
+.smart-weekdays>div{display:flex;gap:10px;flex-wrap:wrap}
+.smart-weekdays label{display:flex;align-items:center;gap:4px;font-size:11px;color:#526372}
+.smart-weekdays input{width:16px;height:16px;min-height:0;accent-color:#b99a68}
