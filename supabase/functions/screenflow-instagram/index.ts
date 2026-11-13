@@ -10,7 +10,6 @@ const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
 const appId=Deno.env.get('IG_APP_ID')||'';
 const appSecret=Deno.env.get('IG_APP_SECRET')||'';
 const keyHex=Deno.env.get('IG_TOKEN_KEY')||'';
-const syncSecret=Deno.env.get('IG_CRON_SECRET')||'';
 const graphVersion=(Deno.env.get('IG_API_VERSION')||'v25.0').replace(/[^v0-9.]/g,'');
 const adminOrigin='https://screenflow-signagead.unlimited-events-ip.workers.dev';
 const functionUrl=projectUrl+'/functions/v1/screenflow-instagram';
@@ -259,7 +258,12 @@ async function start(req:Request,body:Record<string,unknown>){
 }
 async function sync(req:Request,body:Record<string,unknown>){
  const manual=await asAdmin(req);
- const automated=syncSecret.length>=24&&req.headers.get('x-screenflow-sync-secret')===syncSecret;
+ const cronHeader=req.headers.get('x-screenflow-sync-secret')||'';
+ let automated=false;
+ if(cronHeader.length>=24){
+   const verified=await api.rpc('screenflow_cron_auth',{p_secret:cronHeader});
+   automated=verified.data===true && !verified.error;
+ }
  if(!manual&&!automated)return respond({error:'Unauthorized'},401);
  if(!secretsReady())return respond({error:'Instagram integration not configured'},503);
  let ids:string[]=[];
