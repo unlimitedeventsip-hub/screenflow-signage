@@ -147,6 +147,27 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
     currentIndex=target.index;
     buildCard(items[target.index],target.offset,target.remaining);
   }
+  function showMenuGrid(chosen,visible,signatureKey){
+    if(active && signature===signatureKey && mode===chosen)return true;
+    stop();
+    active=true;mode=chosen;items=visible;signature=signatureKey;
+    audio.mediaChanged('image');
+    const title=chosen==='happy_hour'?'HAPPY HOUR':'MENIU DIGITAL';
+    const subtitle=chosen==='happy_hour'?'Oferte disponibile în intervalele afișate':'Selecția locației';
+    stage.innerHTML='<section class="smart-menu-stage">'+
+      '<div class="smart-menu-header"><div class="smart-menu-brand">screenflow<span>.</span></div>'+
+      '<div><small>'+title+'</small><h1>'+subtitle+'</h1></div></div>'+
+      '<div class="smart-menu-grid">'+visible.slice(0,12).map(item=>{
+        const url=item.storage_path?getUrl(item.storage_path):'';
+        const img=item.kind==='image'&&url?'<img src="'+clean(url)+'" alt="">':'<div class="smart-menu-placeholder">#altfel</div>';
+        return '<article class="smart-menu-card"><div class="smart-menu-cover">'+img+'</div>'+
+          '<div><strong>'+clean(item.title)+'</strong>'+
+          (item.subtitle?'<span>'+clean(item.subtitle)+'</span>':'')+
+          (item.body?'<p>'+clean(item.body)+'</p>':'')+'</div></article>';
+      }).join('')+'</div>'+
+      '<div class="smart-menu-footer">#altfel · Meniu digital</div></section>';
+    return true;
+  }
   function show(data,offset=0){
     const chosen=String(data?.display_mode||'ads');
     const visible=(Array.isArray(data?.smart_items)?data.smart_items:[])
@@ -155,6 +176,7 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
     if(chosen==='ads'||!visible.length){if(active)stop();return false;}
     const nextSig=JSON.stringify({mode:chosen,items:visible,
       synchronized:data.synchronized,anchor:data.sync_anchor});
+    if(chosen==='menu'||chosen==='happy_hour')return showMenuGrid(chosen,visible,nextSig);
     serverOffset=Number(offset)||0;
     if(!active||nextSig!==signature){
       stop();
