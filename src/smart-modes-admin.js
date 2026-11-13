@@ -95,9 +95,16 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
         '<label>Poziția<input name="sort_order" type="number" min="0" max="99999" value="'+(items.length+1)+'" required></label>'+
         '<label>Începe la<input name="starts_at" type="datetime-local"></label>'+
         '<label>Se încheie la<input name="ends_at" type="datetime-local"></label>'+
+        '<label>Oră zilnică de început<input name="daily_start" type="time" title="Pentru Happy Hour, meniuri și alte afișări recurente"></label>'+
+        '<label>Oră zilnică de sfârșit<input name="daily_end" type="time" title="Permite și interval după miezul nopții"></label>'+
+        '<div class="smart-weekdays"><strong>Zile de afișare (program recurent)</strong><div>'+
+        [['1','Lun'],['2','Mar'],['3','Mie'],['4','Joi'],['5','Vin'],['6','Sâm'],['7','Dum']].map(d=>
+          '<label><input type="checkbox" name="weekday" value="'+d[0]+'" checked>'+d[1]+'</label>').join('')+
+        '</div></div>'+
+
         '<button class="btn primary" type="submit">Adaugă și aprobă pentru TV</button>'+
       '</form>'+
       '<div class="smart-items">'+(rows||'<p class="tv-empty">Niciun material încă. Adaugă primul conținut pentru acest mod.</p>')+'</div>'+
       '</section>'+
-      '<p class="smart-hint">Postările sunt introduse de administrator, nu preluate automat de Instagram. Pentru afișare fără internet, adaugă o fotografie sau un MP4 din Biblioteca media.</p>';
+      '<p class="smart-hint">După autorizarea contului Instagram Professional și configurarea Meta, postările se importă automat la fiecare 10 minute. Până atunci, poți adăuga manual conținut. Materialele pregătite pentru offline rămân disponibile fără internet.</p>';
 }
