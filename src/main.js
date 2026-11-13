@@ -64,8 +64,8 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null };
-  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Smart Modes'],['locations','pin','Locații'] ];
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null, playbackEvents:[] };
+  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Smart Modes'],['diagnostics','settings','Diagnostic TV'],['locations','pin','Locații'] ];
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const fmt = date => date ? new Date(date).toLocaleDateString('ro-RO',{day:'2-digit',month:'short',year:'numeric'}) : '—';
@@ -138,6 +138,9 @@ async function startAdmin() {
     state.controls=controls.data||[];
     state.tvCommands=commands.data||[];
     state.agentStatuses=agents.data||[];
+    const audit=await supabase.from('tv_playback_events').select('*')
+      .order('occurred_at',{ascending:false}).limit(120);
+    state.playbackEvents=audit.data||[];
     if(!state.smartLocation||!state.locations.some(x=>x.id===state.smartLocation))
       state.smartLocation=state.locations[0]?.id||null;
     await refreshDevices();
@@ -250,8 +253,38 @@ async function startAdmin() {
       ${state.agentPairInfo?'<div class="agent-one-time"><strong>Cheia agentului — afișată o singură dată</strong><p>Descarcă fișierul de configurare și transferă-l în siguranță pe mini-PC. Reasocierea invalidează cheia veche.</p><button type="button" class="btn primary small" data-action="agent-download">Descarcă screenflow-agent.json</button></div>':''}
       <p><a href="https://github.com/unlimitedeventsip-hub/screenflow-signage/tree/main/agent" target="_blank" rel="noopener noreferrer">Instrucțiuni pentru instalarea agentului</a></p></div></section>`;
 }
+  function diagnosticsView(){
+    const now=Date.now();
+    const rows=state.screens.map(s=>{
+      const t=state.installations.find(x=>x.screen_id===s.id);
+      const seconds=t?Math.max(0,Math.floor((now-new Date(t.last_seen_at).getTime())/1000)):null;
+      const fresh=seconds!==null&&seconds<45;
+      const bg=fresh&&t?.playback_state==='background';
+      const status=!t?'Fără aplicație asociată':!fresh?'Fără răspuns':bg?'Aplicație în fundal':'Player online';
+      return '<div class="diagnostic-screen"><strong>'+safe(s.name)+'</strong>'+
+        '<span class="pill '+(fresh&&!bg?'green':'gray')+'">'+status+'</span>'+
+        '<small>'+(seconds===null?'Niciun heartbeat':'Ultimul heartbeat acum '+seconds+' secunde')+'</small>'+
+        (t?.error_message?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'</div>';
+    }).join('');
+    const history=state.playbackEvents.map(item=>{
+      const tv=state.screens.find(x=>x.id===item.screen_id);
+      const asset=state.assets.find(x=>x.id===item.asset_id);
+      return '<tr><td>'+safe(new Date(item.occurred_at).toLocaleString('ro-RO'))+'</td>'+
+        '<td>'+safe(tv?.name||'TV dezactivat')+'</td>'+
+        '<td>'+safe(item.event_type)+'</td><td>'+safe(asset?.title||'—')+'</td>'+
+        '<td>'+safe(item.playback_state||'—')+'</td></tr>';
+    }).join('');
+    return heading('MONITORIZARE','Diagnostic și jurnal TV',
+      'Ultimele materiale transmise, erori și televizoare fără heartbeat. Un TV fără răspuns poate fi oprit, fără internet sau poate avea aplicația închisă.')+
+      '<section class="panel"><div class="panel-head"><h2>Stare dispozitive</h2></div>'+
+      '<div class="diagnostic-screens">'+rows+'</div></section>'+
+      '<section class="panel"><div class="panel-head"><h2>Jurnalul ultimelor 120 de evenimente</h2><span>90 ZILE RETENȚIE</span></div>'+
+      (history?'<div class="diagnostic-table-wrap"><table class="diagnostic-table"><thead><tr><th>Data</th><th>TV</th><th>Eveniment</th><th>Material</th><th>Stare</th></tr></thead><tbody>'+history+'</tbody></table></div>':
+        '<p class="tv-empty">Nu avem încă evenimente de redare înregistrate. Apar la următoarea schimbare de material sau stare.</p>')+
+      '</section>';
+  }
   function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>DIGITAL SIGNAGE</small></div></div><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
-  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),screens:screensView,locations:locationsView})[state.view]?.()||overview());}
+  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),diagnostics:diagnosticsView,screens:screensView,locations:locationsView})[state.view]?.()||overview());}
   async function perform(op,success){state.busy=true;state.error='';render();try{await op();await load();state.busy=false;toast(success||'Modificările au fost salvate.');}catch(e){state.busy=false;showError(e.message);} }
   async function insert(table,record){const {error}=await supabase.from(table).insert(record);if(error)throw error;}
   async function patch(table,id,record){const {error}=await supabase.from(table).update(record).eq('id',id);if(error)throw error;}
