@@ -6,6 +6,7 @@ import { createAudioPlayback } from './audio-playback.js';
 import { renderAudioView } from './audio-admin.js';
 import { attachPortraitBackdrop } from './video-portrait.js';
 import { createPortraitVideoPoster } from './video-poster.js';
+import { readVideoDurationSeconds } from './video-duration.js';
 import { uploadScreenflowAudio } from './audio-upload.js';
 import { splitMp3ForFreeStorage, MAX_AUDIO_BYTES } from './audio-chunks.js';
 import './video-portrait.css';
@@ -91,7 +92,7 @@ async function startAdmin() {
     const background=recent&&t.playback_state==='background';
     const status=active?'APLICAȚIE ONLINE':background?'APLICAȚIE ÎN FUNDAL':'FĂRĂ RĂSPUNS';
     const asset=state.assets.find(a=>a.id===t.current_asset_id);
-    return '<div class="tv-state"><span class="'+(active?'tv-dot on':'tv-dot')+'"></span><strong>'+status+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Ultimul material: '+safe(asset.title):'Ultima stare: '+safe(t.playback_state||'—'))+'</small><small>Ultimul contact: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small>'+(active?'':'<small>Nu putem distinge automat între TV oprit, standby, aplicație închisă sau lipsă internet.</small>')+'</div>';
+    return '<div class="tv-state"><span class="'+(active?'tv-dot on':'tv-dot')+'"></span><strong>'+status+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Ultimul material: '+safe(asset.title):'Ultima stare: '+safe(t.playback_state||'—'))+'</small>'+(t.error_message?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'<small>Ultimul contact: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small>'+(active?'':'<small>Nu putem distinge automat între TV oprit, standby, aplicație închisă sau lipsă internet.</small>')+'</div>';
 }
   async function load() {
     const [locations,playlists,assets,items,screens] = await Promise.all([
@@ -347,7 +348,8 @@ async function startAdmin() {
       if(file.size>50*1024*1024){showError('Fișierul depășește 50 MB. Comprimă video sau mărește limita din Supabase.');return;}
       const path=`${crypto.randomUUID()}.${file.type==='video/mp4'?'mp4':file.type.split('/')[1]==='jpeg'?'jpg':file.type.split('/')[1]}`;
       perform(async()=>{
-        const poster=file.type==='video/mp4'?await createPortraitVideoPoster(file):null;
+        const mediaDuration=file.type==='video/mp4'?await readVideoDurationSeconds(file):10;
+      const poster=file.type==='video/mp4'?await createPortraitVideoPoster(file):null;
         const posterPath=poster?'backgrounds/'+crypto.randomUUID()+'.jpg':null;
         if(posterPath){
           const posterUpload=await supabase.storage.from('ads').upload(posterPath,poster,{
@@ -363,7 +365,7 @@ async function startAdmin() {
         try{await insert('assets',{
           title:name,storage_path:path,
           kind:file.type.startsWith('video/')?'video':'image',
-          blur_background_path:posterPath,duration_seconds:10
+          blur_background_path:posterPath,duration_seconds:mediaDuration
         });}
         catch(e){await supabase.storage.from('ads').remove([path,posterPath].filter(Boolean));throw e;}
       },'Reclama a fost încărcată. Fundalul blurat se generează automat pentru video vertical.');
@@ -380,7 +382,7 @@ function startPlayer(){
   document.title='Screenflow · TV Player';
   root.innerHTML=`<div class="tv-stage" id="tv-stage"><div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>Se pregătește conținutul...</p></div></div><div class="tv-indicator" id="tv-indicator"></div>`;
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
-  let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null;
+  let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null, videoProblem='';
   const cacheKey=`screenflow:manifest:${publicId}`;
   const getUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const audio=createAudioPlayback({stage,indicator,getUrl});
@@ -418,13 +420,15 @@ function startPlayer(){
     const url=getUrl(a.storage_path);
     if(a.kind==='image'){
       stage.innerHTML='<img class="tv-media" alt="" />';
-      audio.mediaChanged('image');
+      videoProblem='';audio.mediaChanged('image');
       const img=stage.querySelector('img');img.src=url;
       img.onerror=()=>{if(my===token)timer=setTimeout(next,1500);};
       timer=setTimeout(()=>{if(my===token)next();},remaining??duration(a));
     } else if(a.kind==='video'){
       stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.src=url;
+      const beganAt=Date.now();let firstVideoFrame=true;
+      videoProblem='';
        clearPortraitBackdrop=attachPortraitBackdrop(stage,video,a.blur_background_path?getUrl(a.blur_background_path):null);
       if(sync)video.onloadedmetadata=()=>{
         if(my!==token||blocked)return;
@@ -437,11 +441,11 @@ function startPlayer(){
         if(into<0||into>=duration(a)){align(true);return;}
         try{video.currentTime=Math.max(0,Math.min(into/1000,video.duration-0.1));}catch{}
       };
-      video.onwaiting=()=>{if(my===token)indicator.textContent='Videoclipul se încarcă…';};
-      video.onstalled=()=>{if(my===token)indicator.textContent='Video: conexiune lentă sau fișier greu';};
-      video.onplaying=()=>{if(my===token){indicator.textContent='';if(sync)align();}};
+      video.onwaiting=()=>{if(my===token){indicator.textContent='Videoclipul se încarcă…';videoProblem='Video: buffering';}};
+      video.onstalled=()=>{if(my===token){indicator.textContent='Video: conexiune lentă sau fișier greu';videoProblem='Video: stalled';}};
+      video.onplaying=()=>{if(my===token){indicator.textContent='';if(firstVideoFrame){firstVideoFrame=false;const delay=Date.now()-beganAt;videoProblem=delay>2500?'Video: pornire în '+(delay/1000).toFixed(1)+' secunde':'';}else videoProblem='';if(sync)align();}};
       video.onended=()=>{if(my===token)next();};
-      video.onerror=()=>{if(my===token)next();};
+      video.onerror=()=>{if(my===token){videoProblem='Video: eroare codec/rețea';next();}};
       audio.prepareVideo(video).catch(()=>{if(my===token){indicator.textContent='Redarea video a fost blocată; verifică playerul TV.';timer=setTimeout(next,3000);}});
       timer=setTimeout(()=>{if(my===token)next();},remaining??60*60*1000);
     } else next();
@@ -490,7 +494,7 @@ function startPlayer(){
   async function heartbeat(){
     if(reporting)return;reporting=true;
     try{
-      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':current.length?'playing':'waiting')});
+      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':current.length?'playing':'waiting'),error:videoProblem});
       if(r?.status==='pending')location.replace('/connect');
       if(r?.status==='approved' && r.screen_public_id && r.screen_public_id!==publicId)location.replace('/play/'+r.screen_public_id);
     }catch(e){console.warn('TV heartbeat',e?.message)}
