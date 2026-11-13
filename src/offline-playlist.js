@@ -64,9 +64,9 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
     try{return validUrl(path);}catch{return '';}
   }).filter(Boolean));
 
-  function mediaUrl(path) {
+  function mediaUrl(path,forceLocal=false) {
     const upstream=validUrl(path);
-    if(blobUrls.has(upstream))return blobUrls.get(upstream);
+    if(forceLocal&&blobUrls.has(upstream))return blobUrls.get(upstream);
     if(supported&&hasWorker&&navigator.serviceWorker.controller&&readyPaths.has(upstream)){
       return '/offline-media?src='+encodeURIComponent(upstream);
     }
@@ -132,6 +132,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   }
   async function prepareOfflineMedia(manifest){
     if(!supported)return false;
+    if(hasWorker&&navigator.serviceWorker.controller)return true;
     const paths=mediaPaths(manifest);
     // Clear previous object URLs before creating a new offline session.
     for(const url of blobUrls.values())URL.revokeObjectURL(url);
