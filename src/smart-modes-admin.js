@@ -1,3 +1,4 @@
+import { renderInteractiveAdmin } from './interactive-admin.js';
 export const SMART_MODES = [
   ['ads','Reclame','Playlist obișnuit'],
   ['menu','Meniu digital','Cocktailuri, cafea, preparate'],
@@ -72,6 +73,7 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
       '</form><p class="smart-hint">Mod activ: <strong>'+safe(current[1])+
       '</strong>. Comenzile ajung pe TV-ul online la următoarea actualizare (circa 15 secunde). Dacă modul nu are materiale aprobate, rulează playlistul obișnuit.</p></section>'+
     igPanel+
+    renderInteractiveAdmin(state,loc,selectedMode)+
     '<section class="panel smart-library"><div class="panel-head"><h2>Conținut pentru moduri</h2><span>POSTĂRI APROBATE</span></div>'+
       '<div class="smart-mode-grid">'+MODE_GROUP.map(m=>
         '<button type="button" data-action="smart-select" data-id="'+safe(m[0])+
