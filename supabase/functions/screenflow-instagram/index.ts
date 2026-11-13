@@ -206,6 +206,20 @@ async function syncOne(locationId:string){
      smart_item_id:card.id,asset_id:assetId,source_timestamp:post.timestamp||null
    });
    if(importError)throw importError;
+   // Reuse the same downloaded file for Photo Wall and Social Wall.
+   // These are local TV assets; no second Instagram request or upload.
+   const extraModes=kind==='image'?['photo_wall','social_wall']:['social_wall'];
+   for(const mode of extraModes){
+     const extra=await api.from('smart_items').insert({
+       location_id:locationId,mode,
+       title:caption||'Instagram @'+c.username,
+       subtitle:'@'+c.username,
+       author_handle:c.username,post_url:post.permalink,
+       asset_id:assetId,duration_seconds:kind==='video'?30:15,
+       sort_order:i,enabled:c.auto_publish
+     });
+     if(extra.error)console.warn('Optional wall card failed',mode);
+   }
    imported++;
   }catch(e){skipped++;console.warn('Instagram media skipped',post.id,errorMessage(e));}
  }
