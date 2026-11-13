@@ -98,7 +98,8 @@ export function createAudioPlayback({ stage, indicator, getUrl }) {
       background_track_parts: chunks
     };
     const newParts = settings.background_audio_enabled ? chunks : [];
-    const key = JSON.stringify(newParts);
+    // Refresh audio source when playback switches from online to local cache.
+    const key = JSON.stringify(newParts.map(path=>getUrl(path)));
     if (audioPath !== key) {
       pauseMusic();
       audioPath = key;
