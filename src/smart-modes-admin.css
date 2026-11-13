@@ -20,3 +20,10 @@
 .smart-item-info small{font-size:10px;color:#90a0ac;display:block;margin-top:5px;line-height:1.4}
 @media(max-width:1100px){.smart-location-form{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.smart-location-form,.smart-item-form{grid-template-columns:1fr}.smart-item-form label:nth-child(3){grid-column:auto}.smart-item{flex-wrap:wrap}.smart-item-info{flex:1 1 160px}}
+
+.instagram-connect-panel{margin-bottom:22px;border:1px solid #c9b58d;background:linear-gradient(140deg,#fffaf0,#fff 75%)}
+.instagram-connect-status{display:grid;gap:6px;padding:15px;background:#f5f4f1;border:1px solid #ebe5db;border-radius:11px}
+.instagram-connect-status strong{font-size:15px;color:#293744}
+.instagram-connect-status small{color:#718090;font-size:11px;line-height:1.5}
+.instagram-connect-status .instagram-error{color:#a24a36}
+.instagram-connect-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
