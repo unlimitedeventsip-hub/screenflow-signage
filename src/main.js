@@ -385,12 +385,13 @@ function startPlayer(){
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
   let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null, videoProblem='';
   const cacheKey=`screenflow:manifest:${publicId}`;
+  let offlinePlayback=false;
   const upstreamUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const offline=createOfflinePlaylist({publicId,getUrl:upstreamUrl,onStatus:message=>{
     if(!indicator.textContent || indicator.textContent.startsWith('Offline:') || indicator.textContent.startsWith('Salvare offline:'))indicator.textContent=message;
   }});
   const getUrl=path=>{
-    try{return offline.mediaUrl(path);}catch{return upstreamUrl(path);}
+    try{return offline.mediaUrl(path,offlinePlayback);}catch{return upstreamUrl(path);}
   };
   const audio=createAudioPlayback({stage,indicator,getUrl});
   let clearPortraitBackdrop=()=>{};
@@ -516,6 +517,7 @@ function startPlayer(){
       if(error)throw error;
       const now=Date.now(),stamp=Date.parse(data?.server_time);
       if(Number.isFinite(stamp))syncOffset=stamp-now;
+      offlinePlayback=false;
       applyManifest(data);
       // Cache complete media after rendering begins; no partial playlist replaces
       // the previous offline version if a download fails.
@@ -525,6 +527,18 @@ function startPlayer(){
     }catch(e){
       const stored=offline.saved();
       if(stored?.manifest){
+        if(!offlinePlayback){
+          const ready=await offline.prepareOfflineMedia(stored.manifest);
+          if(!ready){
+            indicator.textContent='Internet indisponibil · fișierele offline lipsesc sau au fost șterse';
+            if(first)standby('Nu există încă o copie locală validă a reclamelor.');
+            return;
+          }
+          // Switch the media source ONCE when cloud access is lost.
+          offlinePlayback=true;
+          clearTimeout(timer);token++;
+          current=[];pending=null;index=0;signature='';first=true;
+        }
         syncOffset=Number(stored.serverOffset)||0;
         applyManifest(stored.manifest,true);
         if(!blocked)indicator.textContent='OFFLINE · Redare din memoria TV';
