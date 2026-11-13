@@ -106,7 +106,8 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
   function show(data,offset=0){
     const chosen=String(data?.display_mode||'ads');
     const visible=(Array.isArray(data?.smart_items)?data.smart_items:[])
-      .filter(x=>x.mode===chosen);
+      .filter(x=>x.mode===chosen)
+      .map(x=>({...x,instagram_handle:String(data.instagram_handle||'')}));
     if(chosen==='ads'||!visible.length){if(active)stop();return false;}
     const nextSig=JSON.stringify({mode:chosen,items:visible,
       synchronized:data.synchronized,anchor:data.sync_anchor});
