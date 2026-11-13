@@ -3,7 +3,7 @@
 const MEDIA_CACHE='screenflow-media-v24';
 const MAX_BYTES=300*1024*1024;
 const RETRY_MS=45000;
-const MAX_AGE_MS=30*24*3600*1000;
+// Keep the last completely downloaded playlist until it is replaced or the TV clears app data.
 
 export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   const key='screenflow:offline:'+publicId;
@@ -27,8 +27,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   function saved() {
     try {
       const data=JSON.parse(localStorage.getItem(key)||'null');
-      if(data?.manifest && Date.now()-data.savedAt<MAX_AGE_MS
-         && Array.isArray(data.manifest.items))return data;
+      if(data?.manifest && Array.isArray(data.manifest.items))return data;
     }catch{}
     return null;
   }
@@ -72,6 +71,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   }
   async function warm(manifest, serverOffset=0) {
     if(!supported) {setStatus('Offline indisponibil pe acest TV');return false;}
+    if(!(await swReady)){setStatus('Nu s-a putut activa stocarea offline pe acest TV');return false;}
     const paths=mediaPaths(manifest),fingerprint=JSON.stringify(paths);
     if(pending)return pending;
     if(fingerprint===lastKey && Date.now()-lastAttempt<RETRY_MS)return false;
