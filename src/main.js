@@ -489,8 +489,8 @@ async function startAdmin() {
       const dailyStart=val('daily_start'),dailyEnd=val('daily_end');
       const weekdays=form.getAll('weekday').map(Number);
       if(Boolean(dailyStart)!==Boolean(dailyEnd) ||
-         (dailyStart&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(dailyStart)) ||
-         (dailyEnd&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(dailyEnd)) ||
+         (dailyStart&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyStart)) ||
+         (dailyEnd&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyEnd)) ||
          !weekdays.length||weekdays.some(x=>!Number.isInteger(x)||x<1||x>7)){
         showError('Verifică programul zilnic și selectează cel puțin o zi.');return;
       }
