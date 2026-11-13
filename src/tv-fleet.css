@@ -23,3 +23,21 @@
 .tv-legacy .create-screen{margin-top:15px}
 .tv-empty{padding:24px;border:1px dashed #536171;border-radius:14px;color:var(--muted,#a3adbb)}
 @media(max-width:850px){.tv-new form,.tv-bulk-form{grid-template-columns:1fr}.tv-summary{grid-template-columns:1fr}.connect-code{font-size:54px;letter-spacing:6px;padding:12px}.tv-connect{padding:22px}}
+
+/* Screenflow v6 — authenticated player controls and daily location schedules */
+.screen-controls{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.screen-controls>.btn{flex:1 1 90px;white-space:nowrap}
+.screen-controls-note{display:block;font-size:10px;color:#8995a3;line-height:1.55;margin-top:7px}
+.location-schedule-list{margin-top:22px;display:grid;gap:15px}
+.location-schedule-card{border:1px solid #e3e8ed;border-radius:12px;padding:16px;background:#fafbfc}
+.location-schedule-head{display:flex;align-items:center;gap:12px;margin-bottom:15px}
+.location-schedule-head>div:nth-child(2){flex:1;min-width:0}
+.location-schedule-head strong{font-size:13px;display:block}
+.location-schedule-head small{font-size:11px;color:#83919f;display:block;margin-top:4px}
+.location-schedule-form{display:grid;grid-template-columns:1fr 1fr auto;gap:11px;align-items:end}
+.location-schedule-form>label{display:grid;gap:6px;font-size:11px;color:#6d7d8e;font-weight:700}
+.location-schedule-form>.location-schedule-toggle{grid-column:1/-1;display:flex;align-items:center;gap:9px;color:#344454}
+.location-schedule-toggle input[type=checkbox]{width:18px;height:18px;min-height:0;accent-color:#ac9063;margin:0}
+.location-schedule-form .btn{min-height:40px}
+.location-schedule-note{display:block;font-size:10px;color:#8998a7;line-height:1.6;margin-top:12px}
+@media(max-width:650px){.location-schedule-form{grid-template-columns:1fr 1fr}.location-schedule-form .btn{grid-column:1/-1}.screen-controls>.btn{flex:1}}
