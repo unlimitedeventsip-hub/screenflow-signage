@@ -10,7 +10,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   let lastKey='',lastAttempt=0,pending=null;
   let status='Pregătire offline…';
   const setStatus=s=>{if(s!==status){status=s;onStatus(s);}};
-  const supported=typeof caches!=='undefined'&&typeof fetch==='function';
+  const supported=typeof caches!=='undefined'&&typeof fetch==='function'&&'serviceWorker' in navigator;
   const mediaPaths=manifest=>{
     const paths=[];
     for(const item of (Array.isArray(manifest?.items)?manifest.items:[])) {
@@ -48,6 +48,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
     }
   }
   const swReady=register();
+  let readyPaths=new Set();
   function validUrl(path){
     const url=getUrl(path),parsed=new URL(url);
     if(parsed.protocol!=='https:'||!parsed.hostname.endsWith('.supabase.co')
@@ -55,6 +56,19 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
       throw new Error('URL media neacceptat pentru stocare offline');
     }
     return url;
+  }
+  // Only media belonging to a fully-downloaded manifest can use local URLs.
+  const previous=saved();
+  if(previous)readyPaths=new Set(mediaPaths(previous.manifest).map(path=>{
+    try{return validUrl(path);}catch{return '';}
+  }).filter(Boolean));
+
+  function mediaUrl(path) {
+    const upstream=validUrl(path);
+    if(supported&&navigator.serviceWorker.controller&&readyPaths.has(upstream)){
+      return '/offline-media?src='+encodeURIComponent(upstream);
+    }
+    return upstream;
   }
   async function warm(manifest, serverOffset=0) {
     if(!supported) {setStatus('Offline indisponibil pe acest TV');return false;}
@@ -92,6 +106,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
           manifest,savedAt:Date.now(),serverOffset:Number(serverOffset)||0,
           files:paths.length
         }));
+        readyPaths=new Set(needed);
         // Remove obsolete assets only AFTER the complete new playlist is safe.
         for(const request of await cache.keys()) {
           if(!needed.has(request.url))await cache.delete(request);
@@ -121,5 +136,5 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
     return null;
   }
   function currentStatus(){return status;}
-  return {swReady,warm,saved,localBlob,currentStatus};
+  return {swReady,warm,saved,localBlob,mediaUrl,currentStatus};
 }
