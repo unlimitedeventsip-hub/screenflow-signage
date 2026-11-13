@@ -253,7 +253,7 @@ async function startAdmin() {
     if(type==='location-new'){if(val('name'))perform(()=>insert('locations',{name:val('name')}),'Locație adăugată.');return;}
     if(type==='location-schedule'){
       const open=val('open_time'),close=val('close_time');
-      if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(open)||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(close)){showError('Ora nu este validă.');return;}
+      if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(open)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(close)){showError('Ora nu este validă.');return;}
       perform(()=>patch('locations',id,{schedule_enabled:form.has('schedule_enabled'),open_time:open,close_time:close}),'Programul locației a fost actualizat.');
       return;
     }
@@ -380,7 +380,7 @@ function startPlayer(){
   document.title='Screenflow · TV Player';
   root.innerHTML=`<div class="tv-stage" id="tv-stage"><div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>Se pregătește conținutul...</p></div></div><div class="tv-indicator" id="tv-indicator"></div>`;
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
-  let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="";
+  let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null;
   const cacheKey=`screenflow:manifest:${publicId}`;
   const getUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const audio=createAudioPlayback({stage,indicator,getUrl});
@@ -388,6 +388,7 @@ function startPlayer(){
   const standby=(msg='Conținutul va apărea în curând.')=>{clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
   const next=()=>{
+    if(blocked)return;
     clearTimeout(timer);token++;
     if(sync){align();return;}
     if(pending){current=pending;pending=null;index=0;}
@@ -395,7 +396,7 @@ function startPlayer(){
     play();
   };
   function align(force=false){
-    if(!sync||!current.length)return;
+    if(blocked||!sync||!current.length)return;
     const length=current.reduce((sum,a)=>sum+duration(a),0);
     if(!length)return;
     let t=((Date.now()+syncOffset-syncAnchor)%length+length)%length;
@@ -410,6 +411,7 @@ function startPlayer(){
     clearTimeout(timer);timer=setTimeout(next,remain);
   }
   function play(offset=0,remaining=null){
+    if(blocked)return;
     clearTimeout(timer);clearPortraitBackdrop();clearPortraitBackdrop=()=>{};const my=++token;
     if(!current.length){standby();return;}
     const a=current[index];if(!a){index=0;play();return;}
@@ -424,7 +426,20 @@ function startPlayer(){
       stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.src=url;
        clearPortraitBackdrop=attachPortraitBackdrop(stage,video,a.blur_background_path?getUrl(a.blur_background_path):null);
-      if(sync&&offset>0)video.onloadedmetadata=()=>{try{video.currentTime=Math.min(offset/1000,Math.max(0,video.duration-0.1));}catch{}};
+      if(sync)video.onloadedmetadata=()=>{
+        if(my!==token||blocked)return;
+        // Seek using current server time, not the offset from before buffering:
+        // slow TV decoders otherwise remain several seconds behind.
+        const total=current.reduce((sum,item)=>sum+duration(item),0);
+        const elapsed=((Date.now()+syncOffset-syncAnchor)%total+total)%total;
+        const before=current.slice(0,index).reduce((sum,item)=>sum+duration(item),0);
+        const into=elapsed-before;
+        if(into<0||into>=duration(a)){align(true);return;}
+        try{video.currentTime=Math.max(0,Math.min(into/1000,video.duration-0.1));}catch{}
+      };
+      video.onwaiting=()=>{if(my===token)indicator.textContent='Videoclipul se încarcă…';};
+      video.onstalled=()=>{if(my===token)indicator.textContent='Video: conexiune lentă sau fișier greu';};
+      video.onplaying=()=>{if(my===token){indicator.textContent='';if(sync)align();}};
       video.onended=()=>{if(my===token)next();};
       video.onerror=()=>{if(my===token)next();};
       audio.prepareVideo(video).catch(()=>{if(my===token){indicator.textContent='Redarea video a fost blocată; verifică playerul TV.';timer=setTimeout(next,3000);}});
@@ -435,6 +450,22 @@ function startPlayer(){
     try{
       const {data,error}=await supabase.rpc('get_screen_manifest',{screen_public_id:publicId});
       if(error)throw error;
+      if(data){
+        const reload=String(data.reload_requested_at||'');
+        if(lastReloadCommand===null)lastReloadCommand=reload;
+        else if(reload && reload!==lastReloadCommand){location.reload();return;}
+        const enabled=data.playback_enabled!==false && data.schedule_open!==false;
+        if(!enabled){
+          if(!blocked){
+            blocked=true;clearTimeout(timer);token++;
+            const video=stage.querySelector('video');if(video)video.pause();
+            standby(data.playback_enabled===false?'Redare pusă pe pauză din Admin.':'În afara programului locației.');
+            indicator.textContent=data.playback_enabled===false?'PAUZĂ DIN ADMIN':'PROGRAM ÎNCHIS';
+          }
+          return;
+        }
+        if(blocked){blocked=false;first=true;signature='';current=[];pending=null;index=0;}
+      }
       if(!data){standby('Televizorul nu există. Verifică linkul din panoul admin.');indicator.textContent='Ecran necunoscut';return;}
       audio.applySettings(data);
        const items=Array.isArray(data.items)?data.items:[];
@@ -459,7 +490,7 @@ function startPlayer(){
   async function heartbeat(){
     if(reporting)return;reporting=true;
     try{
-      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(current.length?'playing':'waiting')});
+      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':current.length?'playing':'waiting')});
       if(r?.status==='pending')location.replace('/connect');
       if(r?.status==='approved' && r.screen_public_id && r.screen_public_id!==publicId)location.replace('/play/'+r.screen_public_id);
     }catch(e){console.warn('TV heartbeat',e?.message)}
