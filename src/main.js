@@ -58,7 +58,7 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false };
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[] };
   const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Smart Modes'],['locations','pin','Locații'] ];
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
@@ -116,6 +116,8 @@ async function startAdmin() {
     const smart=await supabase.from('smart_items').select('*').order('sort_order').order('created_at');
     state.smartReady=!smart.error;
     state.smartItems=smart.data||[];
+    const connections=await supabase.rpc('instagram_connection_status');
+    state.instagramConnections=connections.data||[];
     if(!state.smartLocation||!state.locations.some(x=>x.id===state.smartLocation))
       state.smartLocation=state.locations[0]?.id||null;
     await refreshDevices();
@@ -209,6 +211,38 @@ async function startAdmin() {
       const tv=state.screens.find(x=>x.id===id);if(!tv)return;
       const record=a==='tv-reload'?{reload_requested_at:new Date().toISOString()}:{playback_enabled:a==='tv-resume'};
       perform(()=>patch('screens',id,record),a==='tv-reload'?'Cererea de reîncărcare a fost trimisă.':a==='tv-resume'?'Redarea este permisă; programul locației rămâne valabil.':'Redarea este pusă pe pauză.');
+      return;
+    }
+    if(['instagram-connect','instagram-sync','instagram-autopublish','instagram-disconnect'].includes(a)){
+      const known=state.locations.find(x=>x.id===id);
+      if(!known)return;
+      const connection=state.instagramConnections.find(x=>x.location_id===id);
+      if(a==='instagram-disconnect'&&!confirm('Deconectezi Instagram pentru '+known.name+'? Materialele deja importate rămân în Screenflow.'))return;
+      state.busy=true;render();
+      try{
+        const action=a==='instagram-connect'?'start':a==='instagram-sync'?'sync':'settings';
+        const payload={action,location_id:id};
+        if(a==='instagram-autopublish')payload.auto_publish=!connection?.auto_publish;
+        if(a==='instagram-disconnect')payload.disconnect=true;
+        const res=await fetch(URL+'/functions/v1/screenflow-instagram',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+state.session.access_token},
+          body:JSON.stringify(payload)
+        });
+        const result=await res.json().catch(()=>({}));
+        if(!res.ok)throw new Error(result.error||'Conectarea Instagram nu a reușit.');
+        if(a==='instagram-connect'){
+          if(!/^https:\/\/www\.instagram\.com\/oauth\/authorize\?/.test(result.authorize_url||''))throw new Error('URL Instagram invalid.');
+          window.location.assign(result.authorize_url);
+          return;
+        }
+        await load();
+        state.busy=false;
+        toast(a==='instagram-sync'?'Importul Instagram a fost executat. Verifică statusul contului.':
+          a==='instagram-disconnect'?'Instagram a fost deconectat.':'Setarea de publicare automată a fost actualizată.');
+      }catch(err){
+        state.busy=false;showError(err.message||'Eroare Instagram.');
+      }
       return;
     }
     if(a==='smart-select'){
