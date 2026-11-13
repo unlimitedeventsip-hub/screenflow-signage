@@ -217,6 +217,25 @@ async function syncOne(locationId:string){
  }).eq('location_id',locationId);
  return {status:'ok',imported,skipped,available:posts.length};
 }
+async function settings(req:Request,body:Record<string,unknown>){
+ const admin=await asAdmin(req);
+ if(!admin)return respond({error:'Unauthorized'},401);
+ const locationId=String(body.location_id||'');
+ if(!/^[0-9a-f-]{36}$/i.test(locationId))return respond({error:'Invalid location'},400);
+ if(body.disconnect===true){
+  const {error}=await api.from('instagram_connections').delete().eq('location_id',locationId);
+  if(error)return respond({error:'Could not disconnect Instagram'},500);
+  return respond({disconnected:true});
+ }
+ const changes:Record<string,boolean>={};
+ if(typeof body.auto_publish==='boolean')changes.auto_publish=body.auto_publish;
+ if(typeof body.enabled==='boolean')changes.enabled=body.enabled;
+ if(!Object.keys(changes).length)return respond({error:'No changes'},400);
+ const {data,error}=await api.from('instagram_connections').update({...changes,updated_at:new Date().toISOString()})
+  .eq('location_id',locationId).select('location_id').maybeSingle();
+ if(error||!data)return respond({error:'Connection not found'},404);
+ return respond({saved:true});
+}
 async function start(req:Request,body:Record<string,unknown>){
  const admin=await asAdmin(req);if(!admin)return respond({error:'Unauthorized'},401);
  if(!secretsReady())return respond({error:'Meta not configured: IG_APP_ID, IG_APP_SECRET and IG_TOKEN_KEY are required in Supabase Secrets'},503);
@@ -272,6 +291,7 @@ Deno.serve(async(req:Request)=>{
   const action=String(body?.action||'');
   if(action==='start')return await start(req,body);
   if(action==='sync')return await sync(req,body);
+  if(action==='settings')return await settings(req,body);
   return respond({error:'Unknown action'},400);
  }catch(e){console.error('screenflow-instagram:',errorMessage(e));return respond({error:'Request failed'},500);}
 });
