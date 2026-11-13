@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
-    "tus-js-client": "4.3.1"
+    "tus-js-client": "4.3.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "vite": "^7.1.0"
