@@ -47,8 +47,11 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        playerUrl = "https://" + HOST + "/connect"; // v2 auto-registers every installed TV, no manual links
-        if (verify(playerUrl) == null) playerUrl = "https://" + HOST + "/connect";
+        // Persist the last paired /play URL: on next boot resume the approved
+        // screen directly. A new TV still opens /connect for individual pairing.
+        String saved = getPreferences(MODE_PRIVATE).getString(PREF_KEY, null);
+        playerUrl = verify(saved);
+        if (playerUrl == null) playerUrl = "https://" + HOST + "/connect";
         acceptIntent(getIntent());
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
@@ -107,7 +110,7 @@ public final class MainActivity extends Activity {
         web.setVerticalScrollBarEnabled(false);
         WebSettings s=web.getSettings();
         s.setJavaScriptEnabled(true);
-        s.setUserAgentString(s.getUserAgentString() + " ScreenflowTV/2.2.0");
+        s.setUserAgentString(s.getUserAgentString() + " ScreenflowTV/2.3.0");
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -134,6 +137,13 @@ public final class MainActivity extends Activity {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 failed=false;
                 if (offline!=null) offline.setVisibility(View.GONE);
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                String allowed = verify(url);
+                if (allowed != null && allowed.contains("/play/")) {
+                    // Each physical TV keeps its own local pairing/URL.
+                    getPreferences(MODE_PRIVATE).edit().putString(PREF_KEY, allowed).apply();
+                }
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
                 if (req.isForMainFrame()) error("Fără conexiune la Screenflow.");
