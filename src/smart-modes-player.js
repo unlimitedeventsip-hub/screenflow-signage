@@ -52,6 +52,21 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
     const qrLink=postUrl || (mode==='instagram'&&handle
       ?'https://www.instagram.com/'+encodeURIComponent(handle)+'/':'');
     const textContent=item.body?'<p class="smart-slide-body">'+clean(item.body)+'</p>':'';
+    const inter=item.interactive_state||null;
+    const liveResults=inter && (mode==='vote'||mode==='karaoke')?(
+      mode==='karaoke'
+      ?'<div class="smart-live-board"><strong>URMEAZĂ LA MICROFON</strong>'+
+        (Array.isArray(inter.karaoke)&&inter.karaoke.length
+          ?inter.karaoke.slice(0,6).map((q,i)=>'<div class="smart-live-row"><span>'+String(i+1)+'. '+clean(q.name)+'</span><small>'+clean(q.song)+'</small></div>').join('')
+          :'<div class="smart-live-row">Scanează pentru înscriere!</div>')+'</div>'
+      :'<div class="smart-live-board"><strong>VOTURI LIVE</strong>'+
+        (Array.isArray(inter.options)?inter.options.slice(0,8).map((opt,i)=>{
+          const count=Number((inter.results||[]).find(r=>Number(r.index)===i)?.votes||0);
+          const sum=(inter.results||[]).reduce((n,r)=>n+Number(r.votes||0),0);
+          const pct=sum?Math.round(count/sum*100):0;
+          return '<div class="smart-live-row"><span>'+clean(opt)+'</span><b>'+pct+'%</b><div class="smart-live-progress"><i style="width:'+pct+'%"></i></div></div>';
+        }).join(''):'')+'</div>'
+    ):'';
     const externalLabel=mode==='instagram'?'VEZI POSTAREA':mode==='vote'?'VOTEAZĂ AICI':
       mode==='loyalty'?'SCANEAZĂ OFERTA':'DESCHIDE LINKUL';
     const photo=imageUrl&&item.kind==='image'
@@ -64,7 +79,7 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
       '<div class="smart-copy"><div class="smart-eyebrow">'+clean(label[mode]||'SCREENFLOW')+'</div>'+
       '<h1 class="smart-headline">'+clean(item.title)+'</h1>'+
       (item.subtitle?'<p class="smart-subtitle">'+clean(item.subtitle)+'</p>':'')+
-      textContent+
+      textContent+liveResults+
       (handle?'<div class="smart-handle">@'+clean(handle)+'</div>':'')+
       '<div class="smart-brand">screenflow<span>.</span></div></div>'+
       (qrLink?'<div class="smart-qr"><img alt="Cod QR" class="smart-qr-image"/><small>'+
