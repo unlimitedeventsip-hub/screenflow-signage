@@ -486,6 +486,14 @@ async function startAdmin() {
       const title=val('title'),postUrl=val('post_url'),handle=val('author_handle').replace(/^@/,'');
       const dur=Number(val('duration_seconds')),order=Number(val('sort_order'));
       const starts=val('starts_at'),ends=val('ends_at');
+      const dailyStart=val('daily_start'),dailyEnd=val('daily_end');
+      const weekdays=form.getAll('weekday').map(Number);
+      if(Boolean(dailyStart)!==Boolean(dailyEnd) ||
+         (dailyStart&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(dailyStart)) ||
+         (dailyEnd&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(dailyEnd)) ||
+         !weekdays.length||weekdays.some(x=>!Number.isInteger(x)||x<1||x>7)){
+        showError('Verifică programul zilnic și selectează cel puțin o zi.');return;
+      }
       if(!title||title.length>150||!Number.isInteger(dur)||dur<3||dur>3600||
          !Number.isInteger(order)||order<0||order>99999){showError('Titlul, durata sau poziția nu sunt valide.');return;}
       if(starts&&ends&&new Date(ends)<=new Date(starts)){showError('Perioada afișării nu este validă.');return;}
@@ -507,7 +515,9 @@ async function startAdmin() {
         author_handle:handle,post_url:postUrl,asset_id:asset,
         duration_seconds:dur,sort_order:order,
         starts_at:starts?new Date(starts).toISOString():null,
-        ends_at:ends?new Date(ends).toISOString():null,enabled:true
+        ends_at:ends?new Date(ends).toISOString():null,
+        daily_start:dailyStart||null,daily_end:dailyEnd||null,
+        weekdays,enabled:true
       }),'Materialul este aprobat și pregătit pentru TV.');return;
     }
     if(type==='location-new'){if(val('name'))perform(()=>insert('locations',{name:val('name')}),'Locație adăugată.');return;}
