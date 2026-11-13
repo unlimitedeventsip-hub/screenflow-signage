@@ -72,7 +72,7 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
         '<button class="btn primary" type="submit">Aplică modul</button>'+
       '</form><p class="smart-hint">Mod activ: <strong>'+safe(current[1])+
       '</strong>. Comenzile ajung pe TV-ul online la următoarea actualizare (circa 15 secunde). Dacă modul nu are materiale aprobate, rulează playlistul obișnuit.</p></section>'+
-    igPanel+
+    (selectedMode==='instagram'?igPanel:'')+
     renderInteractiveAdmin(state,loc,selectedMode)+
     '<section class="panel smart-library"><div class="panel-head"><h2>Conținut pentru moduri</h2><span>POSTĂRI APROBATE</span></div>'+
       '<div class="smart-mode-grid">'+MODE_GROUP.map(m=>
@@ -86,6 +86,7 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
         '<input type="hidden" name="mode" value="'+safe(selectedMode)+'">'+
         '<label>Titlu<input name="title" required maxlength="150" placeholder="Ex.: Nou pe Instagram / Gingerbread Martini"></label>'+
         '<label>Subtitlu / Preț / Anunț<input name="subtitle" maxlength="200" placeholder="Ex.: 27 lei · Disponibil azi"></label>'+
+        (selectedMode==='menu'?'<label class="hub-checkbox"><input type="checkbox" name="guest_visible" checked> Publică și pe pagina QR a clienților</label>':'')+
         '<label>Text afișat<textarea name="body" maxlength="1200" rows="2" placeholder="Descriere, mesaj sau informații"></textarea></label>'+
         '<label>Media din bibliotecă<select name="asset_id">'+
           '<option value="">Fără imagine/video</option>'+assetOptions+'</select></label>'+

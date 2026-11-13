@@ -15,6 +15,10 @@ import './smart-modes-admin.css';
 import { uploadScreenflowAudio } from './audio-upload.js';
 import { splitMp3ForFreeStorage, MAX_AUDIO_BYTES } from './audio-chunks.js';
 import './video-portrait.css';
+import { renderGuestHub, renderGuestAdmin, hydrateGuestQR, downloadGuestQR } from './guest-hub.js';
+import { createMirrorSender, createDisplayExperience, renderMirrorAdmin } from './screen-mirror.js';
+import { httpsLink } from './experience-utils.js';
+import './premium-admin.css';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -48,7 +52,9 @@ const icon = (name, size=19) => {
 };
 
 if (!configured) {
-  root.innerHTML = `<main class="setup-page"><div class="setup-card"><span class="brand-icon">${icon('monitor',28)}</span><p class="eyebrow">SCREENFLOW / SETUP</p><h1>Platforma este pregătită pentru configurare.</h1><p>Înainte de publicare, conectează proiectul Supabase folosind variabilele <code>VITE_SUPABASE_URL</code> și <code>VITE_SUPABASE_ANON_KEY</code>. Instrucțiunile complete sunt în README.md.</p><div class="setup-note">GitHub → Netlify → Supabase → reclame pe TV</div></div></main>`;
+  root.innerHTML = `<main class="setup-page"><div class="setup-card"><span class="brand-icon">${icon('monitor',28)}</span><p class="eyebrow">SCREENFLOW / SETUP</p><h1>Platforma este pregătită pentru configurare.</h1><p>Înainte de publicare, conectează proiectul Supabase folosind variabilele <code>VITE_SUPABASE_URL</code> și <code>VITE_SUPABASE_ANON_KEY</code>. Instrucțiunile complete sunt în README.md.</p><div class="setup-note">GitHub <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg> Netlify <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg> Supabase <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg> reclame pe TV</div></div></main>`;
+} else if (location.pathname.startsWith('/g/')) {
+  renderGuestHub({root,supabaseUrl:URL,slug:location.pathname.split('/')[2]||''});
 } else if (location.pathname.startsWith('/join/')) {
   const eventId=location.pathname.split('/')[2]||'';
   if(/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(eventId))
@@ -64,8 +70,21 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null, playbackEvents:[] };
-  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Smart Modes'],['diagnostics','settings','Diagnostic TV'],['locations','pin','Locații'] ];
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null, playbackEvents:[],guestHubs:[],guestReservations:[],guestLocation:null,mirrorTarget:null,mirrorActive:false,mirrorStatus:'' };
+  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Experiențe TV'],['guests','external','Clienți & QR'],['mirror','monitor','Partajare ecran'],['diagnostics','settings','Diagnostic TV'],['locations','pin','Locații'] ];
+  const mirrorSender=createMirrorSender({supabase,displayEndpoint:URL+'/functions/v1/screenflow-display',onChange:({active,status,stream})=>{
+    const changed=state.mirrorActive!==active;
+    state.mirrorActive=active;state.mirrorStatus=status;
+    if(changed&&state.view==='mirror')render();
+    else hydrateMirror();
+  }});
+  function hydrateMirror(){
+    const preview=root.querySelector('[data-mirror-preview]'),stream=mirrorSender.stream();
+    if(preview){if(preview.srcObject!==stream)preview.srcObject=stream;preview.closest('.mirror-preview')?.classList.toggle('sharing',!!stream);}
+    const live=root.querySelector('.mirror-live');if(live)live.hidden=!stream;
+    const status=root.querySelector('[data-mirror-status]');if(status)status.textContent=state.mirrorStatus||'Pregătit pentru partajare.';
+  }
+  window.addEventListener('pagehide',()=>{mirrorSender.stop();});
   let toastTimeout;
   const pubUrl = path => supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
   const fmt = date => date ? new Date(date).toLocaleDateString('ro-RO',{day:'2-digit',month:'short',year:'numeric'}) : '—';
@@ -143,6 +162,12 @@ async function startAdmin() {
     state.playbackEvents=audit.data||[];
     if(!state.smartLocation||!state.locations.some(x=>x.id===state.smartLocation))
       state.smartLocation=state.locations[0]?.id||null;
+    const [hubs,reservations]=await Promise.all([
+      supabase.from('guest_hubs').select('*').order('title'),
+      supabase.from('guest_reservations').select('id,hub_id,guest_name,phone,requested_at,guests,note,status,created_at').order('requested_at',{ascending:false}).limit(300)
+    ]);
+    state.guestHubs=hubs.data||[];state.guestReservations=reservations.data||[];
+    if(!state.guestLocation)state.guestLocation=state.locations[0]?.id||null;
     await refreshDevices();
   }
   async function validate() {
@@ -162,10 +187,10 @@ async function startAdmin() {
   function frame(content) {
     const title = NAV.find(n=>n[0]===state.view)?.[2] || 'Panou general';
     return `<div class="dashboard"><aside class="sidebar">
-      <div class="brand"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>DIGITAL SIGNAGE</small></div></div>
-      <div class="sidebar-label">WORKSPACE</div><nav class="nav">${NAV.map(n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-nav="${n[0]}">${icon(n[1])}<span>${n[2]}</span>${n[0]==='screens'?`<i>${state.screens.length}</i>`:''}</button>`).join('')}</nav>
+      <div class="brand"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>LOCATIONS & EXPERIENCES</small></div></div>
+      <div class="sidebar-label">CONTROLUL LOCAȚIILOR TALE</div><nav class="nav">${NAV.map(n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-nav="${n[0]}">${icon(n[1])}<span>${n[2]}</span>${n[0]==='screens'?`<i>${state.screens.length}</i>`:''}</button>`).join('')}</nav>
       <div class="sidebar-bottom"><div class="account"><div class="avatar">${safe((state.session?.user?.email||'A')[0].toUpperCase())}</div><div><strong>Administrator</strong><small title="${safe(state.session?.user?.email)}">${safe(state.session?.user?.email)}</small></div></div><button data-action="logout" class="icon-button" title="Deconectare">${icon('logout')}</button></div>
-    </aside><main class="main"><header class="topbar"><div class="crumb"><span>WORKSPACE</span><span>/</span><strong>${title}</strong></div><div class="top-actions"><span class="status"><b></b> ${state.fleetReady?'Monitorizare TV activă':'Control reclame'}</span><button class="btn subtle small" data-nav="screens">${icon('monitor',16)} Ecranele mele</button></div></header>
+    </aside><main class="main"><header class="topbar"><div class="crumb"><span>SCREENFLOW</span><span>/</span><strong>${title}</strong></div><div class="top-actions">${state.mirrorActive?'<button class="btn subtle small" data-nav="mirror">Ecran partajat · Gestionează</button>':''}<span class="status"><b></b> ${state.fleetReady?'Monitorizare TV activă':'Control reclame'}</span><button class="btn subtle small" data-nav="screens">${icon('monitor',16)} Ecranele mele</button></div></header>
     <div class="content">${state.error?`<div class="alert">${safe(state.error)} <button data-action="dismiss-error">×</button></div>`:''}${content}</div></main>
     ${state.toast?`<div class="toast">${icon('check',17)} ${safe(state.toast)}</div>`:''}
     ${state.busy?`<div class="busy"><div class="spinner"></div><span data-audio-progress>${state.audioUploadProgress===null?'Se procesează...':`Se încarcă muzica: ${state.audioUploadProgress}%`}</span></div>`:''}</div>`;
@@ -179,7 +204,7 @@ async function startAdmin() {
     <div class="stat"><div class="stat-icon">${icon('image')}</div><span>Reclame active</span><strong>${active}</strong><small>Imagini și videoclipuri</small></div>
     <div class="stat"><div class="stat-icon">${icon('list')}</div><span>Playlisturi</span><strong>${state.playlists.length}</strong><small>Actualizare automată pe TV</small></div>
     <div class="stat"><div class="stat-icon">${icon('pin')}</div><span>Locații</span><strong>${state.locations.length}</strong><small>Dintr-un singur dashboard</small></div></div>
-    ${fleetSummary()}${pendingPanel()}<div class="two-col"><section class="panel"><div class="panel-head"><h2>Acces rapid</h2><span>CONTROL CENTER</span></div><div class="quick">${[['assets','cloud','Încarcă materiale','Poze și video în bibliotecă'],['playlists','list','Construiește un playlist','Alege ordinea și durata'],['screens','monitor','Conectează un televizor','Deschide linkul unic pe TV']].map(v=>`<button data-nav="${v[0]}" class="quick-item"><span class="quick-icon">${icon(v[1])}</span><span><strong>${v[2]}</strong><small>${v[3]}</small></span>${icon('arrow',17)}</button>`).join('')}</div></section>
+    <section class="premium-hero"><div><div class="kicker">DE LA ECRAN LA EXPERIENȚĂ</div><h2>Toată locația. Un singur loc.</h2><p>Clienții scanează, descoperă meniul și rezervă. Tu alegi ce rulează pe fiecare televizor.</p></div><div class="premium-hero-actions"><button class="btn primary" data-nav="guests">Pagina clienților <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button class="btn subtle" data-nav="mirror">Partajează ecranul</button></div></section>${fleetSummary()}${pendingPanel()}<div class="two-col"><section class="panel"><div class="panel-head"><h2>Acces rapid</h2><span>CONTROL CENTER</span></div><div class="quick">${[['assets','cloud','Încarcă materiale','Poze și video în bibliotecă'],['playlists','list','Construiește un playlist','Alege ordinea și durata'],['screens','monitor','Conectează un televizor','Deschide linkul unic pe TV']].map(v=>`<button data-nav="${v[0]}" class="quick-item"><span class="quick-icon">${icon(v[1])}</span><span><strong>${v[2]}</strong><small>${v[3]}</small></span>${icon('arrow',17)}</button>`).join('')}</div></section>
     <section class="panel"><div class="panel-head"><h2>Ultimele materiale</h2><button data-nav="assets" class="text-link">Vezi toate ${icon('arrow',15)}</button></div>${state.assets.length?`<div class="recent">${state.assets.slice(0,4).map(a=>`<div class="recent-row"><span class="mini-preview">${a.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt=""/>`:`${icon('play',18)}`}</span><div><strong>${safe(a.title)}</strong><small>${a.kind==='image'?'Imagine':'Video'} · ${fmt(a.created_at)}</small></div><span class="pill ${a.enabled?'green':'gray'}">${a.enabled?'Activ':'Oprit'}</span></div>`).join('')}</div>`:empty('image','Biblioteca este goală','Încarcă prima reclamă pentru a începe.')}</section></div>`;
   }
   function assetsView(){
@@ -201,7 +226,7 @@ async function startAdmin() {
       const agent=state.agentStatuses.find(x=>x.location_id===s.location_id);
       const agentOnline=agent?.last_seen_at&&Date.now()-new Date(agent.last_seen_at).getTime()<60000;
       return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><select name="location">${selectOptions(state.locations,s.location_id,'Fără locație')}</select><button type="submit" class="btn small subtle">Actualizează</button></form>${screenInfo(s)}<div class="screen-controls"><button type="button" class="btn small ${s.playback_enabled?"subtle":"primary"}" data-action="tv-resume" data-id="${s.id}">Pornește redarea</button><button type="button" class="btn small subtle" data-action="tv-pause" data-id="${s.id}">Pauză</button><button type="button" class="btn small subtle" data-action="tv-reload" data-id="${s.id}">Reîncarcă</button></div><small class="screen-controls-note">Comenzile de mai sus controlează playerul web. Pentru aplicații închise / pornire fizică trebuie agentul local.</small>
-      <div class="remote-panel">
+      <details><summary>Configurare avansată · Control fizic TV</summary><div class="remote-panel">
         <small>Agent local: ${agentOnline?'ONLINE':agent?'FĂRĂ RĂSPUNS':'NEASOCIAT'} ${lastCmd?' · Ultima comandă: '+safe(lastCmd.action)+' ('+safe(lastCmd.status)+')':''}</small>
         <form data-form="device-control" data-id="${s.id}" class="remote-control-form">
           <input name="control_ip" aria-label="Adresă IP TV" placeholder="IP local TV" maxlength="45" value="${safe(control?.control_ip||'')}">
@@ -218,8 +243,8 @@ async function startAdmin() {
           <button type="button" class="btn small subtle" data-action="remote-launch" data-id="${s.id}">Lansează aplicația</button>
           <button type="button" class="btn small subtle" data-action="remote-standby" data-id="${s.id}">Standby</button>
         </div>
-      </div>
-      <div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
+      </div></details>
+      <button class="btn small subtle screen-mirror-button" data-action="mirror-select" data-id="${s.id}">Partajează ecranul pe acest TV <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
     return heading('DISTRIBUȚIE','Televizoare','Aplicațiile TV apar automat. Confirmă codul de pe ecran, alege locația și playlistul.')+fleetSummary()+pendingPanel()+`<section class="panel tv-bulk"><h2>Playlist comun pentru locație</h2><form data-form="tv-bulk" class="tv-bulk-form"><select name="location_id" required>${selectOptions(state.locations,null,'Locația')}</select><select name="playlist_id" required>${selectOptions(state.playlists,null,'Playlistul')}</select><button class="btn primary" type="submit">Aplică la toate TV-urile</button></form><p>Exemplu: toate cele 5 TV de la #altfel Unirii vor primi același playlist.</p></section><details class="panel tv-legacy"><summary>Adăugare manuală (doar pentru browsere vechi)</summary><section class="create-screen"><div><h2>Conectează un televizor nou</h2><p>Adaugă-l, copiază linkul și deschide-l pe TV.</p></div><form data-form="screen-new" class="screen-form"><input name="name" placeholder="Ex.: TV Bar 1" required maxlength="100"><select name="location_id">${selectOptions(state.locations,null,'Alege locația')}</select><select name="playlist_id">${selectOptions(state.playlists,null,'Alege playlistul')}</select><button class="btn primary" type="submit">${icon('plus',16)} Adaugă ecran</button></form></section></details><div class="section-heading"><h2>Ecranele tale <span>${state.screens.length}</span></h2></div>${rows?`<div class="screens-grid">${rows}</div>`:empty('monitor','Niciun ecran adăugat','Configurează un televizor folosind formularul de mai sus.')}`;
   }
   function locationsView(){
@@ -283,8 +308,8 @@ async function startAdmin() {
         '<p class="tv-empty">Nu avem încă evenimente de redare înregistrate. Apar la următoarea schimbare de material sau stare.</p>')+
       '</section>';
   }
-  function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>DIGITAL SIGNAGE</small></div></div><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
-  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),diagnostics:diagnosticsView,screens:screensView,locations:locationsView})[state.view]?.()||overview());}
+  function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>LOCATIONS & EXPERIENCES</small></div></div><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
+  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),guests:()=>renderGuestAdmin({state,heading}),mirror:()=>renderMirrorAdmin({state,heading}),diagnostics:diagnosticsView,screens:screensView,locations:locationsView})[state.view]?.()||overview()); if(state.view==='guests')hydrateGuestQR(root,state); if(state.view==='mirror')hydrateMirror();}
   async function perform(op,success){state.busy=true;state.error='';render();try{await op();await load();state.busy=false;toast(success||'Modificările au fost salvate.');}catch(e){state.busy=false;showError(e.message);} }
   async function insert(table,record){const {error}=await supabase.from(table).insert(record);if(error)throw error;}
   async function patch(table,id,record){const {error}=await supabase.from(table).update(record).eq('id',id);if(error)throw error;}
@@ -293,8 +318,37 @@ async function startAdmin() {
     const nav=e.target.closest('[data-nav]'); if(nav){state.view=nav.dataset.nav;render();return;}
     const el=e.target.closest('[data-action]');if(!el)return;
     const a=el.dataset.action,id=el.dataset.id;
+    if(a==='mirror-select'){state.mirrorTarget=id;state.view='mirror';render();return;}
+    if(a==='mirror-start'){
+      const target=root.querySelector('[data-mirror-target]')?.value||state.mirrorTarget;
+      const screen=state.screens.find(x=>x.id===target);
+      if(!screen){showError('Alege televizorul pe care vrei să partajezi.');return;}
+      state.mirrorTarget=target;
+      try{await mirrorSender.start(screen);}catch(e){showError(e.message||'Partajarea nu a pornit.');}
+      return;
+    }
+    if(a==='mirror-stop'){await mirrorSender.stop();return;}
+    if(a==='guest-refresh'){perform(async()=>{},'Cererile au fost actualizate.');return;}
+    if(a==='guest-menu-edit'){state.smartLocation=id;state.smartMode='menu';state.view='smart';render();return;}
+    if(a==='guest-download-qr'){
+      const hub=state.guestHubs.find(x=>x.id===id);if(hub)downloadGuestQR(hub).catch(e=>showError(e.message));return;
+    }
+    if(a==='guest-menu-toggle'){
+      const item=state.smartItems.find(x=>x.id===id&&x.mode==='menu');if(!item)return;
+      perform(()=>patch('smart_items',id,{guest_visible:!item.guest_visible}),item.guest_visible?'Produs retras de pe pagina clienților.':'Produs publicat și pe pagina clienților.');return;
+    }
+    if(a==='guest-create'){
+      const loc=state.locations.find(x=>x.id===id);if(!loc)return;
+      const slug=loc.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'locatie';
+      perform(()=>insert('guest_hubs',{location_id:id,slug:slug+'-'+crypto.randomUUID().slice(0,6),title:loc.name}),'Pagina QR a fost creată.');return;
+    }
+    if(['guest-confirm','guest-cancel','guest-delete'].includes(a)){
+      if(!state.guestReservations.some(x=>x.id===id))return;
+      if(a==='guest-delete'&&!confirm('Ștergi definitiv datele acestei cereri?'))return;
+      perform(()=>a==='guest-delete'?remove('guest_reservations',id):patch('guest_reservations',id,{status:a==='guest-confirm'?'confirmed':'cancelled'}),'Cererea a fost actualizată.');return;
+    }
     if(a==='dismiss-error'){state.error='';render();return;}
-    if(a==='logout'){await supabase.auth.signOut();state.session=null;state.isAdmin=false;render();return;}
+    if(a==='logout'){await mirrorSender.stop();await supabase.auth.signOut();state.session=null;state.isAdmin=false;render();return;}
     if(a==='select-playlist'){state.selectedPlaylist=id;render();return;}
     if(['tv-resume','tv-pause','tv-reload'].includes(a)){
       const tv=state.screens.find(x=>x.id===id);if(!tv)return;
@@ -446,6 +500,8 @@ async function startAdmin() {
   });
   root.addEventListener('change',e=>{
     const input=e.target;
+    if(input?.matches('[data-guest-location]')){state.guestLocation=input.value;render();return;}
+    if(input?.matches('[data-mirror-target]')){state.mirrorTarget=input.value;return;}
     if(input?.name==='location_id'&&input.closest('form[data-form="smart-location"]')){
       if(state.locations.some(x=>x.id===input.value)){state.smartLocation=input.value;render();}
     }
@@ -453,6 +509,14 @@ async function startAdmin() {
   root.addEventListener('submit',async e=>{
     const f=e.target.closest('form[data-form]');if(!f)return;e.preventDefault();
     const type=f.dataset.form, id=f.dataset.id, form=new FormData(f), val=k=>String(form.get(k)||'').trim();
+    if(type==='guest-settings'){
+      if(!state.guestHubs.some(x=>x.id===id))return;
+      const links=['menu_url','booking_url','tickets_url','instagram_url','facebook_url','tiktok_url','maps_url'];
+      if(links.some(k=>val(k)&&!httpsLink(val(k)))){showError('Folosește linkuri complete care încep cu https://.');return;}
+      const record=Object.fromEntries(links.map(k=>[k,val(k)?httpsLink(val(k)):'']));
+      Object.assign(record,{title:val('title'),description:val('description'),enabled:form.has('enabled'),booking_enabled:form.has('booking_enabled'),qr_on_tv:form.has('qr_on_tv')});
+      perform(()=>patch('guest_hubs',id,record),'Pagina clienților a fost actualizată. Codul QR rămâne același.');return;
+    }
     if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else await validate();return;}
     if(type==='device-control'){
       if(!state.screens.some(x=>x.id===id))return;
@@ -544,7 +608,7 @@ async function startAdmin() {
         }
       }
       perform(()=>insert('smart_items',{
-        location_id:loc,mode,title,subtitle:val('subtitle'),body:val('body'),
+        location_id:loc,mode,title,guest_visible:mode==='menu'&&form.has('guest_visible'),subtitle:val('subtitle'),body:val('body'),
         author_handle:handle,post_url:postUrl,asset_id:asset,
         duration_seconds:dur,sort_order:order,
         starts_at:starts?new Date(starts).toISOString():null,
@@ -697,6 +761,12 @@ function startPlayer(){
   const audio=createAudioPlayback({stage,indicator,getUrl});
   const smart=createSmartModePlayer({stage,indicator,getUrl,audio});
   let smartModeActive=false;
+  const experience=createDisplayExperience({supabaseUrl:URL,publicId,isAllowed:()=>!blocked,onActiveChange:active=>{
+    clearTimeout(timer);token++;smart.stop();smartModeActive=false;
+    audio.mediaChanged('none');
+    stage.querySelectorAll('video,audio').forEach(v=>v.pause());
+    if(!active){first=true;signature='';current=[];pending=null;index=0;refresh();}
+  }});
   let clearPortraitBackdrop=()=>{};
   const standby=(msg='Conținutul va apărea în curând.')=>{clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
@@ -724,7 +794,7 @@ function startPlayer(){
     clearTimeout(timer);timer=setTimeout(next,remain);
   }
   function play(offset=0,remaining=null){
-    if(blocked)return;
+    if(blocked||experience.isActive())return;
     clearTimeout(timer);clearPortraitBackdrop();clearPortraitBackdrop=()=>{};const my=++token;
     if(!current.length){standby();return;}
     const a=current[index];if(!a){index=0;play();return;}
@@ -799,6 +869,7 @@ function startPlayer(){
       return;
     }
     if(blocked){blocked=false;first=true;signature='';current=[];pending=null;index=0;}
+    if(experience.isActive())return;
     audio.applySettings(data);
     const smartNow=smart.show(data,syncOffset);
     if(smartNow){
