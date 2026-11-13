@@ -465,6 +465,8 @@ function startPlayer(){
     try{return offline.mediaUrl(path,offlinePlayback);}catch{return upstreamUrl(path);}
   };
   const audio=createAudioPlayback({stage,indicator,getUrl});
+  const smart=createSmartModePlayer({stage,indicator,getUrl,audio});
+  let smartModeActive=false;
   let clearPortraitBackdrop=()=>{};
   const standby=(msg='Conținutul va apărea în curând.')=>{clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
@@ -559,6 +561,7 @@ function startPlayer(){
     if(!allowed){
       if(!blocked){
         blocked=true;clearTimeout(timer);token++;
+        smart.stop();smartModeActive=false;
         const video=stage.querySelector('video');if(video)video.pause();
         standby(data.playback_enabled===false?'Redare pusă pe pauză din Admin.':'În afara programului locației.');
         indicator.textContent=data.playback_enabled===false?'PAUZĂ DIN ADMIN':'PROGRAM ÎNCHIS';
@@ -567,6 +570,18 @@ function startPlayer(){
     }
     if(blocked){blocked=false;first=true;signature='';current=[];pending=null;index=0;}
     audio.applySettings(data);
+    const smartNow=smart.show(data,syncOffset);
+    if(smartNow){
+      if(!smartModeActive){
+        clearTimeout(timer);token++;current=[];pending=null;index=0;
+        first=true;signature='';smartModeActive=true;
+      }
+      return;
+    }
+    if(smartModeActive){
+      smart.stop();smartModeActive=false;
+      first=true;signature='';current=[];pending=null;index=0;
+    }
     const items=Array.isArray(data.items)?data.items:[];
     if(!isOffline){
       try{localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));}catch{}
@@ -588,7 +603,11 @@ function startPlayer(){
       if(error)throw error;
       const now=Date.now(),stamp=Date.parse(data?.server_time);
       if(Number.isFinite(stamp))syncOffset=stamp-now;
-      offlinePlayback=false;
+      if(offlinePlayback){
+        offlinePlayback=false;smart.stop();smartModeActive=false;
+        clearTimeout(timer);token++;current=[];pending=null;index=0;
+        first=true;signature='';
+      }
       applyManifest(data);
       // Cache complete media after rendering begins; no partial playlist replaces
       // the previous offline version if a download fails.
@@ -607,6 +626,7 @@ function startPlayer(){
           }
           // Switch the media source ONCE when cloud access is lost.
           offlinePlayback=true;
+          smart.stop();smartModeActive=false;
           clearTimeout(timer);token++;
           current=[];pending=null;index=0;signature='';first=true;
         }
