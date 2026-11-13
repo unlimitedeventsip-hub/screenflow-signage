@@ -1,3 +1,4 @@
+// Compatibility endpoint for previously deployed guest forms. New pages use screenflow-guest-v2.
 import {createClient} from 'npm:@supabase/supabase-js@2.119.0';
 import {isScheduled,localReservationDate} from '../../../src/experience-utils.js';
 const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});

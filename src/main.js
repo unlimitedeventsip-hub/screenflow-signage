@@ -19,6 +19,10 @@ import { renderGuestHub, renderGuestAdmin, hydrateGuestQR, downloadGuestQR } fro
 import { createMirrorSender, createDisplayExperience, renderMirrorAdmin } from './screen-mirror.js';
 import { httpsLink } from './experience-utils.js';
 import './premium-admin.css';
+import {renderReservationManager} from './reservation-manager.js';
+import {setupPWA} from './pwa.js';
+import {aiPrompt,parseAIImport} from './ai-import.js';
+setupPWA();
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -53,6 +57,8 @@ const icon = (name, size=19) => {
 
 if (!configured) {
   root.innerHTML = `<main class="setup-page"><div class="setup-card"><span class="brand-icon">${icon('monitor',28)}</span><p class="eyebrow">SCREENFLOW / SETUP</p><h1>Platforma este pregătită pentru configurare.</h1><p>Înainte de publicare, conectează proiectul Supabase folosind variabilele <code>VITE_SUPABASE_URL</code> și <code>VITE_SUPABASE_ANON_KEY</code>. Instrucțiunile complete sunt în README.md.</p><div class="setup-note">GitHub <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg> Netlify <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg> Supabase <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg> reclame pe TV</div></div></main>`;
+} else if (location.pathname.startsWith('/manage')) {
+  renderReservationManager({root,supabase,supabaseUrl:URL,slug:location.pathname.split('/')[2]||''});
 } else if (location.pathname.startsWith('/g/')) {
   renderGuestHub({root,supabaseUrl:URL,slug:location.pathname.split('/')[2]||''});
 } else if (location.pathname.startsWith('/join/')) {
@@ -70,7 +76,7 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'instagram', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null, playbackEvents:[],guestHubs:[],guestReservations:[],guestLocation:null,mirrorTarget:null,mirrorActive:false,mirrorStatus:'' };
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'menu', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null, playbackEvents:[],guestHubs:[],guestReservations:[],guestLocation:null,mirrorTarget:null,mirrorActive:false,mirrorStatus:'' };
   const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Experiențe TV'],['guests','external','Clienți & QR'],['mirror','monitor','Partajare ecran'],['diagnostics','settings','Diagnostic TV'],['locations','pin','Locații'] ];
   const mirrorSender=createMirrorSender({supabase,displayEndpoint:URL+'/functions/v1/screenflow-display',onChange:({active,status,stream})=>{
     const changed=state.mirrorActive!==active;
@@ -143,12 +149,13 @@ async function startAdmin() {
     state.smartItems=smart.data||[];
     const connections=await supabase.rpc('instagram_connection_status');
     state.instagramConnections=connections.data||[];
-    const [events,karaoke]=await Promise.all([
+    const [events,karaoke,quizGames]=await Promise.all([
       supabase.from('interactive_events').select('*').order('created_at',{ascending:false}).limit(100),
-      supabase.from('karaoke_queue').select('*').order('position').limit(150)
+      supabase.from('karaoke_queue').select('*').order('position').limit(150),
+      supabase.from('quiz_games').select('*')
     ]);
     state.interactiveEvents=events.data||[];
-    state.karaokeQueue=karaoke.data||[];
+    state.karaokeQueue=karaoke.data||[];state.quizGames=quizGames.data||[];
     const [controls,commands,agents]=await Promise.all([
       supabase.from('tv_device_controls').select('*'),
       supabase.from('tv_remote_commands').select('*').order('created_at',{ascending:false}).limit(120),
@@ -164,7 +171,7 @@ async function startAdmin() {
       state.smartLocation=state.locations[0]?.id||null;
     const [hubs,reservations]=await Promise.all([
       supabase.from('guest_hubs').select('*').order('title'),
-      supabase.from('guest_reservations').select('id,hub_id,guest_name,phone,requested_at,guests,note,status,created_at').order('requested_at',{ascending:false}).limit(300)
+      supabase.from('guest_reservations').select('id,hub_id,guest_name,phone,email,requested_at,guests,note,status,attendance,created_at').order('requested_at',{ascending:false}).limit(300)
     ]);
     state.guestHubs=hubs.data||[];state.guestReservations=reservations.data||[];
     if(!state.guestLocation)state.guestLocation=state.locations[0]?.id||null;
@@ -318,6 +325,56 @@ async function startAdmin() {
     const nav=e.target.closest('[data-nav]'); if(nav){state.view=nav.dataset.nav;render();return;}
     const el=e.target.closest('[data-action]');if(!el)return;
     const a=el.dataset.action,id=el.dataset.id;
+    if(a.startsWith('ai-')){
+      const panel=el.closest('[data-ai-studio]'),mode=panel?.dataset.aiStudio;if(!panel)return;
+      const output=panel.querySelector('[data-ai-preview]');
+      try{
+        if(a==='ai-prompt'){
+          const prompt=aiPrompt(panel.querySelector('[data-ai-topic]').value,mode);
+          try{await navigator.clipboard.writeText(prompt);output.textContent='Prompt copiat. Lipește-l în AI, apoi adu răspunsul în câmpul de mai sus.';}
+          catch{output.innerHTML='<p>Copiază promptul de aici:</p><textarea readonly rows="8">'+safe(prompt)+'</textarea>';}
+          return;
+        }
+        const data=parseAIImport(panel.querySelector('[data-ai-json]').value,mode);
+        if(a==='ai-preview'){
+          output.innerHTML=data.type==='quiz'?'<h3>'+safe(data.title)+' · '+data.questions.length+' întrebări</h3>'+data.questions.map((q,i)=>'<article class="ai-preview-card"><h3>'+String(i+1)+'. '+safe(q.text)+'</h3><ol>'+q.options.map((v,j)=>'<li>'+safe(v)+(j===q.correct?' ✓':'')+'</li>').join('')+'</ol><p>'+safe(q.explanation)+'</p></article>').join(''):
+            data.items.map(x=>'<article class="ai-preview-card"><h3>'+safe(x.title)+'</h3><b>'+safe(x.subtitle)+'</b><p>'+safe(x.body)+'</p></article>').join('');
+          panel.dataset.validated=panel.querySelector('[data-ai-json]').value;panel.querySelector('[data-action="ai-publish"]').disabled=false;return;
+        }
+        if(panel.dataset.validated!==panel.querySelector('[data-ai-json]').value)throw Error('Previzualizează din nou după modificarea codului.');
+        const loc=state.smartLocation||state.locations[0]?.id;
+        if(!loc)throw Error('Alege locația.');
+        perform(async()=>{
+          if(mode==='quiz'){
+            const {data:{session}}=await supabase.auth.getSession();
+            const res=await fetch(URL+'/functions/v1/screenflow-interactive',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:'import-quiz',location_id:loc,quiz:data})});
+            const result=await res.json();if(!res.ok)throw Error(result.error||'Quizul nu a fost creat.');
+          }else{
+            const rows=data.items.map((x,i)=>({...x,location_id:loc,mode,guest_visible:mode==='menu',sort_order:state.smartItems.filter(x=>x.location_id===loc&&x.mode===mode).length+i+1,enabled:true}));
+            const {error}=await supabase.from('smart_items').insert(rows);if(error)throw error;
+          }
+        },mode==='quiz'?'Quiz creat. Pornește prima întrebare când sunt pregătiți participanții.':'Materialele au fost publicate.');
+      }catch(err){output.textContent=err.message;panel.querySelector('[data-action="ai-publish"]').disabled=true;}
+      return;
+    }
+    if(a==='quiz-control'){
+      const g=(state.quizGames||[]).find(x=>x.event_id===id);if(!g)return;
+      perform(async()=>{const {data:{session}}=await supabase.auth.getSession();const res=await fetch(URL+'/functions/v1/screenflow-interactive',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:'quiz-control',id,command:el.dataset.command,version:g.version})});const result=await res.json();if(!res.ok)throw Error(result.error||'Runda nu a putut fi schimbată.');},'Runda a fost actualizată.');return;
+    }
+    if(a==='smart-activate'){
+      const loc=state.smartLocation||state.locations[0]?.id;if(!state.smartItems.some(x=>x.location_id===loc&&x.mode===id&&x.enabled)){showError('Adaugă mai întâi conținut pentru acest mod.');return;}perform(()=>patch('locations',loc,{display_mode:id}),'Modul ales va apărea pe TV-urile online.');return;
+    }
+    if(a==='smart-edit'){
+      const item=state.smartItems.find(x=>x.id===id);if(!item)return;
+      const f=root.querySelector('[data-form="smart-item"]');if(!f)return;
+      f.dataset.id=item.id;
+      for(const key of ['title','category','subtitle','body','asset_id','post_url','author_handle','duration_seconds','sort_order'])if(f.elements[key])f.elements[key].value=item[key]??'';
+      for(const key of ['starts_at','ends_at'])f.elements[key].value=inputDate(item[key]);
+      for(const key of ['daily_start','daily_end'])f.elements[key].value=(item[key]||'').slice(0,5);
+      if(f.elements.guest_visible)f.elements.guest_visible.checked=item.guest_visible;
+      for(const input of f.querySelectorAll('[name="weekday"]'))input.checked=(item.weekdays||[1,2,3,4,5,6,7]).includes(Number(input.value));
+      f.querySelector('button[type="submit"],button:not([type])').textContent='Salvează modificările';f.elements.title.focus();f.scrollIntoView({behavior:'smooth',block:'center'});return;
+    }
     if(a==='mirror-select'){state.mirrorTarget=id;state.view='mirror';render();return;}
     if(a==='mirror-start'){
       const target=root.querySelector('[data-mirror-target]')?.value||state.mirrorTarget;
@@ -341,11 +398,6 @@ async function startAdmin() {
       const loc=state.locations.find(x=>x.id===id);if(!loc)return;
       const slug=loc.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'locatie';
       perform(()=>insert('guest_hubs',{location_id:id,slug:slug+'-'+crypto.randomUUID().slice(0,6),title:loc.name}),'Pagina QR a fost creată.');return;
-    }
-    if(['guest-confirm','guest-cancel','guest-delete'].includes(a)){
-      if(!state.guestReservations.some(x=>x.id===id))return;
-      if(a==='guest-delete'&&!confirm('Ștergi definitiv datele acestei cereri?'))return;
-      perform(()=>a==='guest-delete'?remove('guest_reservations',id):patch('guest_reservations',id,{status:a==='guest-confirm'?'confirmed':'cancelled'}),'Cererea a fost actualizată.');return;
     }
     if(a==='dismiss-error'){state.error='';render();return;}
     if(a==='logout'){await mirrorSender.stop();await supabase.auth.signOut();state.session=null;state.isAdmin=false;render();return;}
@@ -498,6 +550,7 @@ async function startAdmin() {
       perform(async()=>{for(let i=0;i<arr.length;i++)await patch('playlist_items',arr[i].id,{position:i+1});},'Ordinea a fost modificată.');
     }
   });
+  root.addEventListener('input',e=>{const panel=e.target.closest('[data-ai-studio]');if(panel&&e.target.matches('[data-ai-json]'))panel.querySelector('[data-action="ai-publish"]').disabled=true;});
   root.addEventListener('change',e=>{
     const input=e.target;
     if(input?.matches('[data-guest-location]')){state.guestLocation=input.value;render();return;}
@@ -572,6 +625,7 @@ async function startAdmin() {
         showError('Instagram: utilizatorul poate conține doar litere, cifre, punct și underscore.');
         return;
       }
+      if(mode!=='ads'&&!state.smartItems.some(x=>x.location_id===locationId&&x.mode===mode&&x.enabled)){showError('Adaugă conținut în acest mod înainte să îl activezi.');return;}
       state.smartLocation=locationId;
       perform(()=>patch('locations',locationId,{display_mode:mode,instagram_handle:handle}),
         'Modul TV a fost actualizat pentru această locație.');return;
@@ -607,15 +661,16 @@ async function startAdmin() {
           showError('Introdu un link public Instagram către o postare sau un Reel.');return;
         }
       }
-      perform(()=>insert('smart_items',{
-        location_id:loc,mode,title,guest_visible:mode==='menu'&&form.has('guest_visible'),subtitle:val('subtitle'),body:val('body'),
+      const smartRecord={
+        location_id:loc,mode,title,category:val('category'),guest_visible:mode==='menu'&&form.has('guest_visible'),subtitle:val('subtitle'),body:val('body'),
         author_handle:handle,post_url:postUrl,asset_id:asset,
         duration_seconds:dur,sort_order:order,
         starts_at:starts?new Date(starts).toISOString():null,
         ends_at:ends?new Date(ends).toISOString():null,
         daily_start:dailyStart||null,daily_end:dailyEnd||null,
         weekdays,enabled:true
-      }),'Materialul este aprobat și pregătit pentru TV.');return;
+      };
+      perform(()=>id&&state.smartItems.some(x=>x.id===id)?patch('smart_items',id,smartRecord):insert('smart_items',smartRecord),'Materialul este aprobat și pregătit pentru TV.');return;
     }
     if(type==='location-new'){if(val('name'))perform(()=>insert('locations',{name:val('name')}),'Locație adăugată.');return;}
     if(type==='location-schedule'){
@@ -760,7 +815,7 @@ function startPlayer(){
   };
   const audio=createAudioPlayback({stage,indicator,getUrl});
   const smart=createSmartModePlayer({stage,indicator,getUrl,audio});
-  let smartModeActive=false;
+  let smartModeActive=false,interactiveLive=false;
   const experience=createDisplayExperience({supabaseUrl:URL,publicId,isAllowed:()=>!blocked,onActiveChange:active=>{
     clearTimeout(timer);token++;smart.stop();smartModeActive=false;
     audio.mediaChanged('none');
@@ -871,8 +926,10 @@ function startPlayer(){
     if(blocked){blocked=false;first=true;signature='';current=[];pending=null;index=0;}
     if(experience.isActive())return;
     audio.applySettings(data);
+    interactiveLive=['vote','karaoke'].includes(data.display_mode);
     const smartNow=smart.show(data,syncOffset);
     if(smartNow){
+      if(!smartModeActive){clearPortraitBackdrop();clearPortraitBackdrop=()=>{};}
       if(!smartModeActive){
         clearTimeout(timer);token++;current=[];pending=null;index=0;
         first=true;signature='';smartModeActive=true;
@@ -898,7 +955,9 @@ function startPlayer(){
       else pending=items;
     }else if(sync)align();
   }
+  let refreshing=false;
   async function refresh(){
+    if(refreshing)return;refreshing=true;
     try {
       const {data,error}=await supabase.rpc('get_screen_manifest',{screen_public_id:publicId});
       if(error)throw error;
@@ -945,20 +1004,20 @@ function startPlayer(){
           }catch{standby('Așteptăm conexiunea la internet...');}
         }
       }
-    }
+    }finally{refreshing=false;}
   }
   let reporting=false;
   async function heartbeat(){
     if(reporting)return;reporting=true;
     try{
-      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':current.length?'playing':'waiting'),error:videoProblem||offline.currentStatus()});
+      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':smartModeActive||current.length?'playing':'waiting'),error:videoProblem||offline.currentStatus()});
       if(r?.status==='pending')location.replace('/connect');
       if(r?.status==='approved' && r.screen_public_id && r.screen_public_id!==publicId)location.replace('/play/'+r.screen_public_id);
     }catch(e){console.warn('TV heartbeat',e?.message)}
     finally{reporting=false}
   }
   refresh();heartbeat();
-  setInterval(refresh,15000);setInterval(heartbeat,15000);
-  setInterval(()=>{if(sync)align();},3000);
+  setInterval(()=>{if(interactiveLive&&!offlinePlayback)refresh();},3000);setInterval(refresh,15000);setInterval(heartbeat,15000);
+  setInterval(()=>{if(sync&&!smartModeActive)align();},3000);
   window.addEventListener('online',()=>{refresh();heartbeat();});
 }

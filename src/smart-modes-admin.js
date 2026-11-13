@@ -1,3 +1,4 @@
+import {renderAIImport} from './ai-import.js';
 import { renderInteractiveAdmin } from './interactive-admin.js';
 export const SMART_MODES = [
   ['ads','Reclame','Playlist obișnuit'],
@@ -23,7 +24,7 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
   const loc=state.locations.find(x=>x.id===state.smartLocation)||state.locations[0];
   if(!loc) return heading('SMART MODES','Experiențe pe televizoare','Adaugă întâi o locație.')+
     '<p class="tv-empty">Nu există locații configurate.</p>';
-  const selectedMode=state.smartMode||'instagram';
+  const selectedMode=state.smartMode||'menu';
   const items=state.smartItems.filter(i=>i.location_id===loc.id&&i.mode===selectedMode)
     .sort((a,b)=>a.sort_order-b.sort_order||a.created_at.localeCompare(b.created_at));
   const assetOptions=state.assets.filter(a=>a.enabled).map(a=>
@@ -38,6 +39,7 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
       ' · '+item.duration_seconds+' sec'+(item.post_url?' · Cu link':'')+
       '</small></div><span class="pill '+(item.enabled?'green':'gray')+'">'+(item.enabled?'Activ':'Inactiv')+'</span>'+
       '<button type="button" class="btn small subtle" data-action="smart-toggle" data-id="'+safe(item.id)+'">'+(item.enabled?'Ascunde':'Activează')+'</button>'+
+      '<button type="button" class="btn small subtle" data-action="smart-edit" data-id="'+safe(item.id)+'">Editează</button>'+
       '<button type="button" class="icon-button danger" title="Șterge" data-action="smart-delete" data-id="'+safe(item.id)+'">✕</button></article>';
   }).join('');
   const instagram=state.instagramConnections?.find(x=>x.location_id===loc.id);
@@ -77,13 +79,14 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
     '<section class="panel smart-library"><div class="panel-head"><h2>Conținut pentru moduri</h2><span>POSTĂRI APROBATE</span></div>'+
       '<div class="smart-mode-grid">'+MODE_GROUP.map(m=>
         '<button type="button" data-action="smart-select" data-id="'+safe(m[0])+
-        '" class="smart-mode-button '+(m[0]===selectedMode?'selected':'')+'">'+safe(m[1])+'</button>').join('')+'</div>'+
+        '" class="smart-mode-button '+(m[0]===selectedMode?'selected':'')+'"><strong>'+safe(m[1])+'</strong><small>'+safe(m[2])+'</small><span>'+state.smartItems.filter(x=>x.location_id===loc.id&&x.mode===m[0]&&x.enabled).length+' materiale</span></button>').join('')+'</div>'+
       '<div class="smart-current"><h3>'+safe((SMART_MODES.find(m=>m[0]===selectedMode)||['','Conținut'])[1])+
-      '</h3><p>'+safe((SMART_MODES.find(m=>m[0]===selectedMode)||['','',''])[2])+'</p></div>'+
+      '</h3><button type="button" class="btn primary small" data-action="smart-activate" data-id="'+safe(selectedMode)+'">Afișează acest mod pe TV</button><p>'+safe((SMART_MODES.find(m=>m[0]===selectedMode)||['','',''])[2])+'</p></div>'+
       (selectedMode==='instagram'?'<p class="smart-hint"><strong>Instagram:</strong> poți adăuga acum postări/Reels aprobate și materialele originale din bibliotecă pentru redare rapidă și offline. Sincronizarea AUTOMATĂ a contului Instagram necesită conectare oficială Meta OAuth; simplul link nu descarcă videoclipul.</p>':'')+
-      '<form class="smart-item-form" data-form="smart-item">'+
+      (!['vote','karaoke'].includes(selectedMode)?'<form class="smart-item-form" data-form="smart-item">'+
         '<input type="hidden" name="location_id" value="'+safe(loc.id)+'">'+
         '<input type="hidden" name="mode" value="'+safe(selectedMode)+'">'+
+        (selectedMode==='menu'?'<label>Categorie<input name="category" maxlength="60" placeholder="Cocktailuri / Cafea / Desert"></label>':'')+
         '<label>Titlu<input name="title" required maxlength="150" placeholder="Ex.: Nou pe Instagram / Gingerbread Martini"></label>'+
         '<label>Subtitlu / Preț / Anunț<input name="subtitle" maxlength="200" placeholder="Ex.: 27 lei · Disponibil azi"></label>'+
         (selectedMode==='menu'?'<label class="hub-checkbox"><input type="checkbox" name="guest_visible" checked> Publică și pe pagina QR a clienților</label>':'')+
@@ -104,8 +107,9 @@ export function renderSmartModesAdmin({state,heading,pubUrl}) {
         '</div></div>'+
 
         '<button class="btn primary" type="submit">Adaugă și aprobă pentru TV</button>'+
-      '</form>'+
+      '</form>':'')+
       '<div class="smart-items">'+(rows||'<p class="tv-empty">Niciun material încă. Adaugă primul conținut pentru acest mod.</p>')+'</div>'+
       '</section>'+
+      (!['vote','karaoke','instagram','photo_wall','social_wall'].includes(selectedMode)?renderAIImport(selectedMode):'')+
       '<p class="smart-hint">După autorizarea contului Instagram Professional și configurarea Meta, postările se importă automat la fiecare 10 minute. Până atunci, poți adăuga manual conținut. Materialele pregătite pentru offline rămân disponibile fără internet.</p>';
 }

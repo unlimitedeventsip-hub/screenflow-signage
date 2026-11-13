@@ -1,0 +1,41 @@
+-- Run as database owner. Every fixture is rolled back; no email/push is sent.
+begin;
+do $$
+declare loc uuid;hub uuid;t uuid;r1 jsonb;r2 jsonb;z jsonb;b1 uuid;b2 uuid;ev uuid;g jsonb;outcome jsonb;
+begin
+ insert into public.locations(name) values('QA transaction only') returning id into loc;
+ insert into public.guest_hubs(location_id,slug,title,max_slot_reservations,max_slot_guests) values(loc,'qa-'||loc::text,'QA',2,4) returning id into hub;
+ insert into public.reservation_tables(hub_id,label,seats) values(hub,'A1',2) returning id into t;
+ r1:=public.create_guest_reservation(hub,repeat('a',24),repeat('1',64),'Test A','0700000000',((now() at time zone 'Europe/Bucharest')+interval '2 days')::text,2,'','a@example.invalid');
+ assert r1->>'error' is null,'valid reservation rejected';
+ z:=public.create_guest_reservation(hub,repeat('a',24),repeat('1',64),'Test A','0700000000',((now() at time zone 'Europe/Bucharest')+interval '2 days')::text,2,'','a@example.invalid');
+ assert r1->>'reference'=z->>'reference','idempotency failed';
+ r2:=public.create_guest_reservation(hub,repeat('b',24),repeat('2',64),'Test B','0700000001',((now() at time zone 'Europe/Bucharest')+interval '2 days')::text,2,'','b@example.invalid');
+ assert r2->>'error' is null,'second reservation rejected';
+ z:=public.create_guest_reservation(hub,repeat('c',24),repeat('3',64),'Test C','0700000002',((now() at time zone 'Europe/Bucharest')+interval '2 days')::text,2,'','c@example.invalid');
+ assert z->>'status'='409','capacity not enforced';
+ select id into b1 from public.guest_reservations where hub_id=hub and request_id=repeat('a',24);
+ select id into b2 from public.guest_reservations where hub_id=hub and request_id=repeat('b',24);
+ outcome:=public.decide_guest_reservation(hub,b1,1,'confirmed','unknown',t,'Vă așteptăm');assert outcome->>'ok'='true','confirmation failed';
+ outcome:=public.decide_guest_reservation(hub,b2,1,'confirmed','unknown',t,'');assert outcome->>'status'='409','table double booking';
+ outcome:=public.decide_guest_reservation(hub,b1,1,'cancelled','unknown',null,'');assert outcome->>'status'='409','stale edit accepted';
+ outcome:=public.decide_guest_reservation(hub,b2,1,'pending','arrived',null,'');assert outcome->>'status'='400','pending attendance accepted';
+ outcome:=public.decide_guest_reservation(gen_random_uuid(),b1,2,'confirmed','unknown',null,'');assert outcome->>'status'='404','cross venue access';
+ outcome:=public.decide_guest_reservation(hub,b1,2,'confirmed','arrived',t,'Vă așteptăm');assert outcome->>'ok'='true','arrival failed';
+ assert (select count(*) from public.reservation_notifications where reservation_id=b1 and kind='confirmed' and channel='email')=1,'duplicate confirmation notifications';
+ assert (select count(*) from public.reservation_notifications where reservation_id=b1 and kind='confirmed' and channel='push' and recipient='guest')=1,'guest push approval missing';
+ assert not has_table_privilege('anon','public.guest_reservations','SELECT'),'public reservation table readable';
+ assert not has_table_privilege('authenticated','public.reservation_managers','SELECT'),'manager secrets exposed';
+ assert not has_function_privilege('authenticated','public.decide_guest_reservation(uuid,uuid,int,text,text,uuid,text)','EXECUTE'),'direct decision bypass';
+ ev:=public.create_quiz_game(loc,'QA quiz','[{"text":"Unu plus unu?","options":["2","3"],"correct":0,"seconds":25,"explanation":"2"}]'::jsonb,'https://screenflow-signagead.unlimited-events-ip.workers.dev');
+ g:=public.interactive_event_state(ev);assert g->>'correct' is null and g->'question'='null'::jsonb,'answers exposed in lobby';
+ outcome:=public.quiz_participate(ev,'test-player','join','QA',0,0);assert outcome->>'ok'='true','join failed';
+ outcome:=public.quiz_control(ev,'start',1);assert outcome->>'ok'='true','quiz start failed';
+ outcome:=public.quiz_participate(ev,'test-player','answer','',0,0);assert outcome->>'ok'='true','quiz answer failed';
+ g:=public.interactive_event_state(ev);assert g->>'correct' is null,'correct answer leaked';assert (g->'leaderboard'->0->>'points')::int=0,'score revealed during voting';
+ outcome:=public.quiz_participate(ev,'test-player','answer','',0,1);assert (select count(*) from public.quiz_answers where event_id=ev)=1,'duplicate quiz response';
+ outcome:=public.quiz_control(ev,'reveal',2);g:=public.interactive_event_state(ev);assert g->>'correct'='0','reveal failed';assert (g->'leaderboard'->0->>'points')::int>0,'score missing';
+ outcome:=public.quiz_control(ev,'next',3);g:=public.interactive_event_state(ev);assert g->>'stage'='finished','finish failed';
+end $$;
+rollback;
+select 'PASS: capacity, table conflicts, stale decisions, venue scope, privacy, quiz scoring and hidden answers' as tests;

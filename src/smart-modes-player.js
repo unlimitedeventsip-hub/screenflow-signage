@@ -82,6 +82,13 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
       ?'https://www.instagram.com/'+encodeURIComponent(handle)+'/':'');
     const textContent=item.body?'<p class="smart-slide-body">'+clean(item.body)+'</p>':'';
     const inter=item.interactive_state||null;
+    if(inter?.kind==='quiz'&&inter.stage){
+      const q=inter.question,rank=(inter.leaderboard||[]).map((p,i)=>'<div><span>'+String(i+1)+'. '+clean(p.name)+'</span><b>'+Number(p.points)+' p</b></div>').join('');
+      stage.innerHTML='<section class="quiz-tv"><header><span>#altfel.</span><small>'+clean(item.title)+' · QUIZ LIVE</small><b>'+Number(inter.players)+' în joc</b></header><div class="quiz-tv-layout"><main><p class="quiz-tv-kicker">'+(inter.stage==='waiting'?'INTRĂ ÎN JOC':inter.stage==='finished'?'CLASAMENT FINAL':'ÎNTREBAREA '+(inter.question_index+1)+' / '+inter.total)+'</p><h1>'+clean(q?.text||(inter.stage==='waiting'?'O seară bună începe cu o întrebare.':'Cine a fost cel mai inspirat?'))+'</h1>'+(q?'<div class="quiz-tv-options">'+q.options.map((v,i)=>'<div class="'+(inter.stage==='reveal'&&i===Number(inter.correct)?'correct':'')+'"><b>'+String.fromCharCode(65+i)+'</b><span>'+clean(v)+'</span></div>').join('')+'</div>':'<p class="quiz-tv-intro">Scanează codul, alege un nume și pregătește-te.</p>')+(inter.stage==='reveal'?'<p class="quiz-tv-explanation">'+clean(inter.explanation)+'</p>':'')+(inter.stage==='question'?'<p class="quiz-tv-intro">'+Number(inter.answers)+' răspunsuri primite</p>':'')+'</main><aside><img class="smart-qr-image" alt="Scanează pentru quiz"><strong>INTRĂ DE PE TELEFON</strong><div class="quiz-tv-ranking">'+rank+'</div></aside></div></section>';
+      if(qrLink)QRCode.toDataURL(qrLink,{margin:1,width:280,errorCorrectionLevel:'M'}).then(src=>{const img=stage.querySelector('.smart-qr-image');if(img&&thisToken===sequenceToken)img.src=src;}).catch(()=>{});
+      audio.mediaChanged('image');timer=setTimeout(()=>showSlide(true),remaining);return;
+    }
+
     const liveResults=inter && (mode==='vote'||mode==='karaoke')?(
       mode==='karaoke'
       ?'<div class="smart-live-board"><strong>URMEAZĂ LA MICROFON</strong>'+
@@ -152,12 +159,13 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
     stop();
     active=true;mode=chosen;items=visible;signature=signatureKey;
     audio.mediaChanged('image');
+    const pages=Math.ceil(visible.length/8),page=Math.floor((Date.now()+serverOffset)/15000)%pages;
     const title=chosen==='happy_hour'?'HAPPY HOUR':'MENIU DIGITAL';
     const subtitle=chosen==='happy_hour'?'Oferte disponibile în intervalele afișate':'Selecția locației';
     stage.innerHTML='<section class="smart-menu-stage">'+
       '<div class="smart-menu-header"><div class="smart-menu-brand">screenflow<span>.</span></div>'+
       '<div><small>'+title+'</small><h1>'+subtitle+'</h1></div></div>'+
-      '<div class="smart-menu-grid">'+visible.slice(0,12).map(item=>{
+      '<div class="smart-menu-grid">'+visible.slice(page*8,page*8+8).map(item=>{
         const url=item.storage_path?getUrl(item.storage_path):'';
         const img=item.kind==='image'&&url?'<img src="'+clean(url)+'" alt="">':'<div class="smart-menu-placeholder">#altfel</div>';
         return '<article class="smart-menu-card"><div class="smart-menu-cover">'+img+'</div>'+
@@ -165,17 +173,18 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
           (item.subtitle?'<span>'+clean(item.subtitle)+'</span>':'')+
           (item.body?'<p>'+clean(item.body)+'</p>':'')+'</div></article>';
       }).join('')+'</div>'+
-      '<div class="smart-menu-footer">#altfel · Meniu digital</div></section>';
+      '<div class="smart-menu-footer">#altfel · Meniu digital · '+(page+1)+' / '+pages+'</div></section>';
+    if(pages>1)timer=setTimeout(()=>{signature='';showMenuGrid(chosen,visible,signatureKey);},15000-(Date.now()+serverOffset)%15000);
     return true;
   }
   function show(data,offset=0){
     const chosen=String(data?.display_mode||'ads');
     const visible=(Array.isArray(data?.smart_items)?data.smart_items:[])
-      .filter(x=>x.mode===chosen&&scheduled(x))
+      .filter(x=>x.mode===chosen&&scheduled(x)&&(!x.interactive_event_id||x.interactive_state))
       .map(x=>({...x,instagram_handle:String(data.instagram_handle||'')}));
     if(chosen==='ads'||!visible.length){if(active)stop();return false;}
     const nextSig=JSON.stringify({mode:chosen,items:visible,
-      synchronized:data.synchronized,anchor:data.sync_anchor});
+      synchronized:data.synchronized,anchor:data.sync_anchor},(key,value)=>key==='server_time'?undefined:value);
     if(chosen==='menu'||chosen==='happy_hour')return showMenuGrid(chosen,visible,nextSig);
     serverOffset=Number(offset)||0;
     if(!active||nextSig!==signature){

@@ -1,7 +1,7 @@
 /* Screenflow offline-first service worker. The TV caches the app shell and the
  * EXACT media URLs fetched by the paired player. No admin session or secrets.
  * Media must be available as a full HTTP 200 response before going offline. */
-const SHELL = 'screenflow-shell-v25-guest-1';
+const SHELL = 'screenflow-shell-v26-venue-quiz-1';
 const MEDIA = 'screenflow-media-v24';
 const PREFIX = 'screenflow-shell-';
 const ROOT = '/';
@@ -64,12 +64,37 @@ async function rangeFromCached(request, cached) {
   return new Response(blob.slice(start,end+1),{status:206,headers});
 }
 
+
+self.addEventListener('push',event=>{
+ event.waitUntil((async()=>{let data={};try{data=(event.data?event.data.json():{});}catch{}
+  const url=typeof data.url==='string'&&(data.url.startsWith('/manage/')||data.url.startsWith('/g/'))?data.url:'/manage';
+  await self.registration.showNotification(data.title||'Rezervare nouă',{body:data.body||'Deschide pagina locației pentru detalii.',icon:'/icon-192.png',badge:'/icon-192.png',tag:data.tag||'screenflow-reservation',data:{url}});
+ })());
+});
+self.addEventListener('notificationclick',event=>{
+ event.notification.close();event.waitUntil((async()=>{
+  const url=new URL((event.notification.data&&event.notification.data.url)||'/manage',self.location.origin).href;
+  for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true})){if(client.url===url&&'focus' in client)return client.focus();}
+  return self.clients.openWindow(url);
+ })());
+});
 self.addEventListener('fetch', event => {
   const req=event.request;
   if (req.method!=='GET') return;
   const url=new URL(req.url);
+  if(url.origin===self.location.origin&&url.pathname==='/manifest.webmanifest'){
+    const venue=url.searchParams.get('venue'),guest=url.searchParams.get('guest');
+    const slug=venue||guest;
+    if(slug&&/^[a-z0-9-]{2,80}$/.test(slug)){
+      const reservation=url.searchParams.get('reservation')||'';
+      const base=(venue?'/manage/':'/g/')+slug;
+      const start=base+(!venue&&/^[a-f0-9-]{36}$/i.test(reservation)?'?reservation='+reservation:'');
+      event.respondWith(new Response(JSON.stringify({id:base,name:(venue?'Rezervări ':'#altfel ')+slug.replace(/^altfel-/,''),short_name:venue?'Rezervări':'#altfel',start_url:start,scope:'/',display:'standalone',background_color:'#f7f5ee',theme_color:'#234d3e',icons:[{src:'/icon-192.png',sizes:'192x192',type:'image/png',purpose:'any'},{src:'/icon-512.png',sizes:'512x512',type:'image/png',purpose:'any maskable'}]}),{headers:{'Content-Type':'application/manifest+json','Cache-Control':'no-cache'}}));return;
+    }
+  }
+
   if (req.mode==='navigate' && url.origin===self.location.origin
-      && (url.pathname.startsWith('/play/') || url.pathname==='/connect')) {
+      && (url.pathname.startsWith('/play/') || url.pathname==='/connect' || url.pathname.startsWith('/manage') || url.pathname.startsWith('/g/') || url.pathname.startsWith('/join/'))) {
     event.respondWith((async () => {
       try {
         const ctl=new AbortController();
