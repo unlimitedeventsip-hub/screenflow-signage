@@ -85,10 +85,14 @@ async function startAdmin() {
   }
   function screenInfo(s){
     const list=state.installations.filter(t=>t.screen_id===s.id);
-    const t=list[0];if(!t)return '<div class="tv-state">Nicio aplicație asociată încă</div>';
-    const online=tvOnline(t),asset=state.assets.find(a=>a.id===t.current_asset_id);
-    return '<div class="tv-state"><span class="'+(online?'tv-dot on':'tv-dot')+'"></span><strong>'+(online?'ONLINE':'OFFLINE')+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Acum: '+safe(asset.title):'Redare: '+safe(t.playback_state||'—'))+'</small><small>Ultima conexiune: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small></div>';
-  }
+    const t=list[0];if(!t)return '<div class="tv-state">Nicio aplicație asociată încă. Starea fizică a televizorului este necunoscută.</div>';
+    const recent=Date.now()-new Date(t.last_seen_at).getTime()<45000;
+    const active=recent&&t.playback_state!=='background';
+    const background=recent&&t.playback_state==='background';
+    const status=active?'APLICAȚIE ONLINE':background?'APLICAȚIE ÎN FUNDAL':'FĂRĂ RĂSPUNS';
+    const asset=state.assets.find(a=>a.id===t.current_asset_id);
+    return '<div class="tv-state"><span class="'+(active?'tv-dot on':'tv-dot')+'"></span><strong>'+status+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Ultimul material: '+safe(asset.title):'Ultima stare: '+safe(t.playback_state||'—'))+'</small><small>Ultimul contact: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small>'+(active?'':'<small>Nu putem distinge automat între TV oprit, standby, aplicație închisă sau lipsă internet.</small>')+'</div>';
+}
   async function load() {
     const [locations,playlists,assets,items,screens] = await Promise.all([
       supabase.from('locations').select('*').order('name'),
@@ -156,12 +160,28 @@ async function startAdmin() {
   }
   function audioView(){return renderAudioView({state,heading,safe,pubUrl});}
   function screensView(){
-    const rows=state.screens.map(s=>{const l=state.locations.find(l=>l.id===s.location_id);const p=state.playlists.find(p=>p.id===s.playlist_id);const link=`${location.origin}/play/${s.public_id}`;return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><select name="location">${selectOptions(state.locations,s.location_id,'Fără locație')}</select><button type="submit" class="btn small subtle">Actualizează</button></form>${screenInfo(s)}<div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
+    const rows=state.screens.map(s=>{const l=state.locations.find(l=>l.id===s.location_id);const p=state.playlists.find(p=>p.id===s.playlist_id);const link=`${location.origin}/play/${s.public_id}`;return `<article class="screen-card"><div class="screen-card-top"><span class="screen-symbol">${icon('monitor',26)}</span><span class="pill ${p?'green':'gray'}">${p?'Playlist activ':'Neconfigurat'}</span></div><h3>${safe(s.name)}</h3><p>${icon('pin',14)} ${safe(l?.name||'Fără locație')}</p><form data-form="screen-assign" data-id="${s.id}" class="screen-assign"><label>Playlist afișat</label><select name="playlist">${selectOptions(state.playlists,s.playlist_id,'Fără playlist')}</select><select name="location">${selectOptions(state.locations,s.location_id,'Fără locație')}</select><button type="submit" class="btn small subtle">Actualizează</button></form>${screenInfo(s)}<div class="screen-controls"><button type="button" class="btn small ${s.playback_enabled?"subtle":"primary"}" data-action="tv-resume" data-id="${s.id}">Pornește redarea</button><button type="button" class="btn small subtle" data-action="tv-pause" data-id="${s.id}">Pauză</button><button type="button" class="btn small subtle" data-action="tv-reload" data-id="${s.id}">Reîncarcă</button></div><small class="screen-controls-note">Aceste comenzi funcționează când playerul Screenflow poate primi date. Nu aprind fizic televizorul.</small><div class="screen-url"><span title="${safe(link)}">${safe(link)}</span><button type="button" data-action="copy-link" data-id="${s.id}" title="Copiază link">${icon('copy',16)}</button></div><div class="card-footer"><a href="${safe(link)}" target="_blank" rel="noopener noreferrer">${icon('external',15)} Deschide player</a><button data-action="delete-screen" data-id="${s.id}" class="link-danger">Șterge</button></div></article>`;}).join('');
     return heading('DISTRIBUȚIE','Televizoare','Aplicațiile TV apar automat. Confirmă codul de pe ecran, alege locația și playlistul.')+fleetSummary()+pendingPanel()+`<section class="panel tv-bulk"><h2>Playlist comun pentru locație</h2><form data-form="tv-bulk" class="tv-bulk-form"><select name="location_id" required>${selectOptions(state.locations,null,'Locația')}</select><select name="playlist_id" required>${selectOptions(state.playlists,null,'Playlistul')}</select><button class="btn primary" type="submit">Aplică la toate TV-urile</button></form><p>Exemplu: toate cele 5 TV de la #altfel Unirii vor primi același playlist.</p></section><details class="panel tv-legacy"><summary>Adăugare manuală (doar pentru browsere vechi)</summary><section class="create-screen"><div><h2>Conectează un televizor nou</h2><p>Adaugă-l, copiază linkul și deschide-l pe TV.</p></div><form data-form="screen-new" class="screen-form"><input name="name" placeholder="Ex.: TV Bar 1" required maxlength="100"><select name="location_id">${selectOptions(state.locations,null,'Alege locația')}</select><select name="playlist_id">${selectOptions(state.playlists,null,'Alege playlistul')}</select><button class="btn primary" type="submit">${icon('plus',16)} Adaugă ecran</button></form></section></details><div class="section-heading"><h2>Ecranele tale <span>${state.screens.length}</span></h2></div>${rows?`<div class="screens-grid">${rows}</div>`:empty('monitor','Niciun ecran adăugat','Configurează un televizor folosind formularul de mai sus.')}`;
   }
   function locationsView(){
-    return heading('ORGANIZARE','Locații','Grupează televizoarele după restaurant, bar, terasă sau alte puncte de difuzare.')+`<section class="panel location-panel"><div class="panel-head"><h2>Adaugă locație</h2></div><form data-form="location-new" class="stack-form"><input name="name" placeholder="Ex.: #altfel ParkLake" maxlength="100" required><button class="btn primary" type="submit">${icon('plus',17)} Creează locație</button></form><div class="location-list">${state.locations.map(l=>`<div class="location-item"><span class="location-icon">${icon('pin')}</span><div><strong>${safe(l.name)}</strong><small>${state.screens.filter(s=>s.location_id===l.id).length} televizoare</small></div><button class="icon-button danger" data-action="delete-location" data-id="${l.id}">${icon('trash',17)}</button></div>`).join('')}</div></section>`;
-  }
+    const cards=state.locations.map(l=>{
+      const opened=String(l.open_time||'15:00').slice(0,5),closed=String(l.close_time||'02:00').slice(0,5);
+      return `<div class="location-schedule-card">
+        <div class="location-schedule-head"><span class="location-icon">${icon('pin')}</span><div><strong>${safe(l.name)}</strong><small>${state.screens.filter(s=>s.location_id===l.id).length} televizoare · ${l.schedule_enabled?'Program automat activ':'Program automat dezactivat'}</small></div><button class="icon-button danger" type="button" data-action="delete-location" data-id="${l.id}" title="Șterge locația">${icon('trash',17)}</button></div>
+        <form data-form="location-schedule" data-id="${l.id}" class="location-schedule-form">
+          <label class="location-schedule-toggle"><input type="checkbox" name="schedule_enabled" ${l.schedule_enabled?'checked':''}> Activează programul de redare</label>
+          <label>Deschidere <input type="time" name="open_time" value="${safe(opened)}" required></label>
+          <label>Închidere <input type="time" name="close_time" value="${safe(closed)}" required></label>
+          <button class="btn small subtle" type="submit">Salvează programul</button>
+        </form>
+        <small class="location-schedule-note">Ora României (Europe/Bucharest). Acceptă închidere după miezul nopții. Comandă redarea Screenflow, nu alimentarea fizică a televizorului.</small>
+      </div>`;
+    }).join('');
+    return heading('ORGANIZARE','Locații','Programează automat redarea reclamelor pe ore. Televizorul trebuie să fie pornit și aplicația activă.')+
+      `<section class="panel location-panel"><div class="panel-head"><h2>Adaugă locație</h2></div>
+      <form data-form="location-new" class="stack-form"><input name="name" placeholder="Ex.: #altfel ParkLake" maxlength="100" required><button class="btn primary" type="submit">${icon('plus',16)} Creează locație</button></form>
+      <div class="location-schedule-list">${cards||empty('pin','Nicio locație','Adaugă prima locație.')}</div></section>`;
+}
   function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>DIGITAL SIGNAGE</small></div></div><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
   function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,screens:screensView,locations:locationsView})[state.view]?.()||overview());}
   async function perform(op,success){state.busy=true;state.error='';render();try{await op();await load();state.busy=false;toast(success||'Modificările au fost salvate.');}catch(e){state.busy=false;showError(e.message);} }
@@ -175,6 +195,12 @@ async function startAdmin() {
     if(a==='dismiss-error'){state.error='';render();return;}
     if(a==='logout'){await supabase.auth.signOut();state.session=null;state.isAdmin=false;render();return;}
     if(a==='select-playlist'){state.selectedPlaylist=id;render();return;}
+    if(['tv-resume','tv-pause','tv-reload'].includes(a)){
+      const tv=state.screens.find(x=>x.id===id);if(!tv)return;
+      const record=a==='tv-reload'?{reload_requested_at:new Date().toISOString()}:{playback_enabled:a==='tv-resume'};
+      perform(()=>patch('screens',id,record),a==='tv-reload'?'Cererea de reîncărcare a fost trimisă.':a==='tv-resume'?'Redarea este permisă; programul locației rămâne valabil.':'Redarea este pusă pe pauză.');
+      return;
+    }
     if(a==='sync-toggle'){
       const p=state.playlists.find(x=>x.id===id);if(!p)return;
       perform(()=>patch('playlists',id,{synchronized:!p.synchronized,sync_anchor:new Date().toISOString()}),
@@ -225,6 +251,12 @@ async function startAdmin() {
     const type=f.dataset.form, id=f.dataset.id, form=new FormData(f), val=k=>String(form.get(k)||'').trim();
     if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else await validate();return;}
     if(type==='location-new'){if(val('name'))perform(()=>insert('locations',{name:val('name')}),'Locație adăugată.');return;}
+    if(type==='location-schedule'){
+      const open=val('open_time'),close=val('close_time');
+      if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(open)||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(close)){showError('Ora nu este validă.');return;}
+      perform(()=>patch('locations',id,{schedule_enabled:form.has('schedule_enabled'),open_time:open,close_time:close}),'Programul locației a fost actualizat.');
+      return;
+    }
     if(type==='playlist-new'){if(val('name'))perform(()=>insert('playlists',{name:val('name')}),'Playlist creat.');return;}
     if(type==='tv-approve'){
       const t=state.installations.find(x=>x.installation_id===id && !x.screen_id);
