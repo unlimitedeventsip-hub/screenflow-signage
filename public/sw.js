@@ -89,6 +89,20 @@ self.addEventListener('fetch', event => {
       || fetch(req))());
     return;
   }
+  if (url.origin===self.location.origin && url.pathname==='/offline-media') {
+    event.respondWith((async () => {
+      const source=url.searchParams.get('src')||'';
+      let sourceUrl;
+      try {sourceUrl=new URL(source);} catch {return new Response('Invalid source',{status:400});}
+      if(!isPublicMedia(sourceUrl))return new Response('Invalid media host',{status:403});
+      const cached=await (await caches.open(MEDIA)).match(source);
+      if(cached)return rangeFromCached(req,cached);
+      // An uncached item is never presented as stored offline.
+      // Fail explicitly so the player can fall back to online URL.
+      return new Response('Not cached on this TV',{status:404});
+    })());
+    return;
+  }
   if (isPublicMedia(url)) {
     // All cached media requests from Screenflow use CORS mode. In no-cors
     // mode we must pass through, as a synthetic 206 would be rejected.
