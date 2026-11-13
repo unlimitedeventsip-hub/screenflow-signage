@@ -15,7 +15,14 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   let blobUrls=new Map();
   const mediaPaths=manifest=>{
     const paths=[];
-    for(const item of (Array.isArray(manifest?.items)?manifest.items:[])) {
+    // Cache the currently selected Smart Mode rather than every unused mode.
+    // Keep normal ads as the fallback when a mode has no approved items.
+    const mode=String(manifest?.display_mode||'ads');
+    const activeMode=(Array.isArray(manifest?.smart_items)?manifest.smart_items:[])
+      .filter(x=>x.mode===mode);
+    const media=mode!=='ads'&&activeMode.length?activeMode:
+      (Array.isArray(manifest?.items)?manifest.items:[]);
+    for(const item of media) {
       if(item?.storage_path)paths.push(item.storage_path);
       if(item?.blur_background_path)paths.push(item.blur_background_path);
     }
