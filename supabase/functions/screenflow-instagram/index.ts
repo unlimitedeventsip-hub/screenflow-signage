@@ -87,20 +87,12 @@ async function callback(req:Request){
   const short=await instagramJson(new URL('https://api.instagram.com/oauth/access_token'),undefined,'POST',
     formBody({client_id:appId,client_secret:appSecret,grant_type:'authorization_code',redirect_uri:functionUrl,code}));
   if(!short.access_token)throw Error('Instagram did not return token');
-  const long=await instagramJson(new URL('https://graph.instagram.com/access_token?grant_type=ig_exchange_token'),
-    String(short.access_token));
-  // Instagram token exchange requires client_secret as well.
-  // Retry with the requested secret only if necessary, never return secrets to browser.
-  let longToken=String(long.access_token||short.access_token);
-  let expires=Number(long.expires_in||0);
-  if(!long.access_token||!expires){
-    const exchanged=new URL('https://graph.instagram.com/access_token');
-    exchanged.searchParams.set('grant_type','ig_exchange_token');
-    exchanged.searchParams.set('client_secret',appSecret);
-    const data=await instagramJson(exchanged,String(short.access_token));
-    longToken=String(data.access_token||short.access_token);
-    expires=Number(data.expires_in||0);
-  }
+  const exchangeUrl=new URL('https://graph.instagram.com/access_token');
+  exchangeUrl.searchParams.set('grant_type','ig_exchange_token');
+  exchangeUrl.searchParams.set('client_secret',appSecret);
+  const long=await instagramJson(exchangeUrl,String(short.access_token));
+  const longToken=String(long.access_token||short.access_token);
+  const expires=Number(long.expires_in||5184000);
   const profileUrl=new URL('https://graph.instagram.com/'+graphVersion+'/me');
   profileUrl.searchParams.set('fields','user_id,username');
   const me=await instagramJson(profileUrl,longToken);
