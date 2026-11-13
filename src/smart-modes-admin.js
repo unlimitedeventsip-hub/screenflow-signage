@@ -15,7 +15,7 @@ export const SMART_MODES = [
 ];
 
 const MODE_GROUP = SMART_MODES.filter(x=>x[0]!=='ads');
-const safe=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;'}[c]));
+const safe=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const option=(value,label,selected)=>'<option value="'+safe(value)+'"'+(selected===value?' selected':'')+'>'+safe(label)+'</option>';
 
 export function renderSmartModesAdmin({state,heading,pubUrl}) {
