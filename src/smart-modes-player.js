@@ -20,6 +20,35 @@ function validLink(value,mode){
   }catch{return '';}
 }
 
+function localClock(){
+ try{
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Bucharest',
+    weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const value=type=>parts.find(p=>p.type===type)?.value||'';
+  return {day:({Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:7})[value('weekday')]||1,
+    time:value('hour')+':'+value('minute')};
+ }catch{
+  const d=new Date();
+  return {day:d.getDay()||7,time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+ }
+}
+function scheduled(item){
+ const now=Date.now();
+ const since=item.starts_at?Date.parse(item.starts_at):NaN;
+ const until=item.ends_at?Date.parse(item.ends_at):NaN;
+ if(Number.isFinite(since)&&now<since)return false;
+ if(Number.isFinite(until)&&now>=until)return false;
+ const {day,time}=localClock();
+ const days=Array.isArray(item.weekdays)?item.weekdays.map(Number):[1,2,3,4,5,6,7];
+ const start=String(item.daily_start||'').slice(0,5);
+ const end=String(item.daily_end||'').slice(0,5);
+ if(!start||!end||start===end)return days.includes(day);
+ if(start<end)return days.includes(day)&&time>=start&&time<end;
+ // Overnight campaigns inherit the previous day's start time after midnight.
+ const yesterday=day===1?7:day-1;
+ return (time>=start&&days.includes(day))||(time<end&&days.includes(yesterday));
+}
+
 export function createSmartModePlayer({stage,indicator,getUrl,audio}){
   let active=false, mode='', items=[], signature='', startAt=0, serverOffset=0,
     synchronized=false, timer=null, sequenceToken=0, currentIndex=-1;
@@ -121,7 +150,7 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
   function show(data,offset=0){
     const chosen=String(data?.display_mode||'ads');
     const visible=(Array.isArray(data?.smart_items)?data.smart_items:[])
-      .filter(x=>x.mode===chosen)
+      .filter(x=>x.mode===chosen&&scheduled(x))
       .map(x=>({...x,instagram_handle:String(data.instagram_handle||'')}));
     if(chosen==='ads'||!visible.length){if(active)stop();return false;}
     const nextSig=JSON.stringify({mode:chosen,items:visible,
