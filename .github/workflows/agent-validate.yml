@@ -1,0 +1,21 @@
+name: Validate Screenflow LAN Agent
+on:
+  push:
+    paths:
+      - 'agent/**'
+      - '.github/workflows/agent-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile agent
+        run: python -m py_compile agent/screenflow_agent.py
+      - name: Import agent without connecting
+        run: python -c "import importlib.util; s=importlib.util.spec_from_file_location('screenflow_agent','agent/screenflow_agent.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); assert m.MAC.fullmatch('94:8C:D7:A8:B0:14'); assert m.valid_ipv4('192.168.1.113') == '192.168.1.113'"
