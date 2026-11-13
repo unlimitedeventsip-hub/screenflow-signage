@@ -115,6 +115,7 @@ export function createDisplayExperience({supabaseUrl,publicId,isAllowed=()=>true
    paintQR(data.hub);const session=isAllowed()?data.session:null;
    if(session){seenUntil=Date.parse(session.expires_at);if(session.id!==id&&!connecting)await accept(session);}
    else if(id)clearMirror();
+   if(qr)qr.style.display=isAllowed()&&!layer&&!document.querySelector('#tv-stage .smart-qr')?'flex':'none';
   }catch{if(id&&Date.now()>seenUntil)clearMirror();}
   finally{polling=false;}
  }
