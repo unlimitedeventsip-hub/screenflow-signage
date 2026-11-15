@@ -111,13 +111,13 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
       ?'<video class="smart-media-video" playsinline preload="auto"></video>':'';
     stage.innerHTML='<section class="smart-stage smart-stage-'+clean(mode)+'">'+
       '<div class="smart-background"></div>'+
-      '<div class="smart-media-panel">'+(photo||movie||'<div class="smart-art">screenflow<span>.</span></div>')+'</div>'+
+      '<div class="smart-media-panel">'+(photo||movie||'<div class="smart-art">#altfel</div>')+'</div>'+
       '<div class="smart-copy"><div class="smart-eyebrow">'+clean(label[mode]||'SCREENFLOW')+'</div>'+
       '<h1 class="smart-headline">'+clean(item.title)+'</h1>'+
       (item.subtitle?'<p class="smart-subtitle">'+clean(item.subtitle)+'</p>':'')+
       textContent+liveResults+
       (handle?'<div class="smart-handle">@'+clean(handle)+'</div>':'')+
-      '<div class="smart-brand">screenflow<span>.</span></div></div>'+
+      '<div class="smart-brand">#altfel</div></div>'+
       (qrLink?'<div class="smart-qr"><img alt="Cod QR" class="smart-qr-image"/><small>'+
       clean(externalLabel)+'</small></div>':'')+
       '</section>';
@@ -163,7 +163,7 @@ export function createSmartModePlayer({stage,indicator,getUrl,audio}){
     const title=chosen==='happy_hour'?'HAPPY HOUR':'MENIU DIGITAL';
     const subtitle=chosen==='happy_hour'?'Oferte disponibile în intervalele afișate':'Selecția locației';
     stage.innerHTML='<section class="smart-menu-stage">'+
-      '<div class="smart-menu-header"><div class="smart-menu-brand">screenflow<span>.</span></div>'+
+      '<div class="smart-menu-header"><div class="smart-menu-brand">#altfel</div>'+
       '<div><small>'+title+'</small><h1>'+subtitle+'</h1></div></div>'+
       '<div class="smart-menu-grid">'+visible.slice(page*8,page*8+8).map(item=>{
         const url=item.storage_path?getUrl(item.storage_path):'';
