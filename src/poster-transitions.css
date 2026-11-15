@@ -1,0 +1,13 @@
+/* Only opacity and transform animate; no full-screen blur on TV hardware. */
+.tv-stage{position:relative;overflow:hidden}
+.tv-stage>.tv-poster{position:absolute;inset:0;pointer-events:none}
+.tv-stage>.tv-poster-entering{
+  opacity:0;
+  transform:translate3d(.9%,0,0) scale(1.018);
+  transition:opacity 800ms ease,transform 800ms cubic-bezier(.22,.61,.36,1);
+  will-change:opacity,transform;
+}
+.tv-stage>.tv-poster-entering.tv-poster-visible{opacity:1;transform:translate3d(0,0,0) scale(1)}
+@media(prefers-reduced-motion:reduce){
+  .tv-stage>.tv-poster-entering{transition:none;transform:none;opacity:1;will-change:auto}
+}

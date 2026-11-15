@@ -22,6 +22,8 @@ import './premium-admin.css';
 import {renderReservationManager} from './reservation-manager.js';
 import {setupPWA} from './pwa.js';
 import {aiPrompt,parseAIImport} from './ai-import.js';
+import {createPosterTransitions} from './poster-transitions.js';
+import './poster-transitions.css';
 setupPWA();
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
@@ -803,6 +805,7 @@ function startPlayer(){
   document.title='Screenflow · TV Player';
   root.innerHTML=`<div class="tv-stage" id="tv-stage"><div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>Se pregătește conținutul...</p></div></div><div class="tv-indicator" id="tv-indicator"></div>`;
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
+  const posters=createPosterTransitions({stage});
   let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null, videoProblem='';
   const cacheKey=`screenflow:manifest:${publicId}`;
   let offlinePlayback=false;
@@ -817,13 +820,13 @@ function startPlayer(){
   const smart=createSmartModePlayer({stage,indicator,getUrl,audio});
   let smartModeActive=false,interactiveLive=false;
   const experience=createDisplayExperience({supabaseUrl:URL,publicId,isAllowed:()=>!blocked,onActiveChange:active=>{
-    clearTimeout(timer);token++;smart.stop();smartModeActive=false;
+    clearTimeout(timer);token++;posters.reset();smart.stop();smartModeActive=false;
     audio.mediaChanged('none');
     stage.querySelectorAll('video,audio').forEach(v=>v.pause());
     if(!active){first=true;signature='';current=[];pending=null;index=0;refresh();}
   }});
   let clearPortraitBackdrop=()=>{};
-  const standby=(msg='Conținutul va apărea în curând.')=>{clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
+  const standby=(msg='Conținutul va apărea în curând.')=>{posters.reset();clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
   const next=()=>{
     if(blocked)return;
@@ -841,7 +844,7 @@ function startPlayer(){
     let wanted=0;
     while(wanted<current.length-1 && t>=duration(current[wanted])){t-=duration(current[wanted]);wanted++;}
     const remain=Math.max(300,duration(current[wanted])-t);
-    if(force||index!==wanted||!stage.querySelector('.tv-media')){index=wanted;play(t,remain);return;}
+    if(force||index!==wanted||(!stage.querySelector('.tv-media')&&!posters.isLoading())){index=wanted;play(t,remain);return;}
     const v=stage.querySelector('video');
     if(v && v.readyState>=1 && Number.isFinite(v.duration) && Math.abs(v.currentTime-t/1000)>1.5){
       try{v.currentTime=Math.min(t/1000,Math.max(0,v.duration-0.1));}catch{}
@@ -855,12 +858,22 @@ function startPlayer(){
     const a=current[index];if(!a){index=0;play();return;}
     const url=getUrl(a.storage_path);
     if(a.kind==='image'){
-      stage.innerHTML='<img class="tv-media" alt="" />';
+      const video=stage.querySelector('video');if(video)video.pause();
       videoProblem='';audio.mediaChanged('image');
-      const img=stage.querySelector('img');img.src=url;
-      img.onerror=()=>{if(my===token)timer=setTimeout(next,1500);};
-      timer=setTimeout(()=>{if(my===token)next();},remaining??duration(a));
+      // Synchronized screens keep the shared clock; other screens start the
+      // poster's full display time only when the image is ready to be shown.
+      timer=setTimeout(()=>{if(my===token)next();},sync?(remaining??duration(a)):15000);
+      posters.show(url,{
+        onReady:()=>{
+          if(my!==token)return;
+          if(!sync){clearTimeout(timer);timer=setTimeout(()=>{if(my===token)next();},duration(a));}
+          const upcoming=pending?.[0]||current[(index+1)%current.length];
+          posters.preload(upcoming?.kind==='image'?getUrl(upcoming.storage_path):null);
+        },
+        onError:()=>{if(my===token){clearTimeout(timer);timer=setTimeout(next,1500);}}
+      });
     } else if(a.kind==='video'){
+      posters.reset();
       stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.src=url;
       const beganAt=Date.now();let firstVideoFrame=true;
@@ -929,7 +942,7 @@ function startPlayer(){
     interactiveLive=['vote','karaoke'].includes(data.display_mode);
     const smartNow=smart.show(data,syncOffset);
     if(smartNow){
-      if(!smartModeActive){clearPortraitBackdrop();clearPortraitBackdrop=()=>{};}
+      if(!smartModeActive){posters.reset();clearPortraitBackdrop();clearPortraitBackdrop=()=>{};}
       if(!smartModeActive){
         clearTimeout(timer);token++;current=[];pending=null;index=0;
         first=true;signature='';smartModeActive=true;
