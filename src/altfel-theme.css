@@ -1,75 +1,196 @@
-/* #altfel visual system for Screenflow.
-   Brand references: black/white mark, understated warmth, high contrast.
-   Applies to the control interface and standby/pairing screens, NEVER to ads. */
+/* ScreenFlow x #altfel — based on the supplied physical #altfel artwork.
+   A practical UI skin: warm cream paper, coral, desaturated teal, sunshine,
+   dark organic contour strokes and tilted black-on-white logotype stickers.
+   Media artwork is deliberately not altered: .tv-media stays untouched. */
 :root {
-  --ink:#292924;
-  --muted:#79786f;
-  --line:#e5e0d5;
-  --gold:#b49a70;
-  --dark:#191a18;
-  background:#f6f3ec;
-  color:#292924;
+  --altfel-paper: #f8efe0;
+  --altfel-cream: #e8d8bc;
+  --altfel-coral: #d56551;
+  --altfel-coral-deep: #b74738;
+  --altfel-teal: #80afa5;
+  --altfel-yellow: #eac748;
+  --altfel-ink: #252526;
+  --altfel-white: #fffdf7;
+  --ink: #292827;
+  --muted: #756f67;
+  --line: #e4d7c4;
+  --gold: #ca9d65;
+  --dark: #252526;
+  color: var(--altfel-ink);
+  background: var(--altfel-paper);
 }
-.dashboard { background:#f6f3ec; }
-.sidebar { background:#191b19; color:#d7d5cd; }
-.sidebar-label,.nav-group-title { color:#a6a396; }
-.brand-symbol { background:#ffffff0a; color:#f1e5cd; border-color:#d9c8a633; }
-.brand strong span,.tv-logo span { color:#d6bb8d; }
-.brand small { color:#b7b09e; letter-spacing:1.6px; }
-.nav-item { color:#b3b6ac; }
-.nav-item.active { color:#f7e9cf; background:#ffffff10; box-shadow:inset 3px 0 #d6bb8d; }
-.nav-item:hover { background:#ffffff0b; }
-.avatar { background:#bca67f; color:#25231f; }
-.topbar { background:#fffefa; border-color:#e7e1d8; }
-.crumb strong { color:#2d2d27; }
+body:not(.tv-body) { background:var(--altfel-paper); }
+.dashboard {
+  background:radial-gradient(ellipse at 100% 0%,#80afa51a 0%,transparent 36%),
+             radial-gradient(ellipse at 15% 80%,#d5655110 0%,transparent 38%),
+             var(--altfel-paper);
+}
+.sidebar { background:var(--altfel-ink); color:#fff5e7; }
+.sidebar::before { content:'';position:absolute;left:-82px;bottom:11%;width:195px;height:160px;
+  background:var(--altfel-coral);border:3px solid var(--altfel-ink);border-radius:42% 58% 62% 38% / 51% 40% 60% 49%;
+  transform:rotate(-23deg);opacity:.27;pointer-events:none; }
+.sidebar>* { position:relative;z-index:1; }
+.brand-symbol { color:var(--altfel-ink);border:0;background:var(--altfel-yellow);border-radius:12px;transform:rotate(-7deg); }
+.brand strong { color:var(--altfel-white);font-size:24px;font-weight:800; }
+.brand strong span,.tv-logo span { color:var(--altfel-coral); }
+.brand small { color:#e4c9a0;letter-spacing:1.45px;font-weight:700; }
+.sidebar-label,.nav-group-title { color:#c9b59c; }
+.nav-item { color:#e3d8cb; }
+.nav-item.active { background:#fffaf0;color:var(--altfel-ink);box-shadow:inset 5px 0 var(--altfel-coral); }
+.nav-item.active svg { color:var(--altfel-coral-deep); }
+.nav-item:hover { background:#ffffff20;color:#fff; }
+.nav-item.active:hover { color:var(--altfel-ink);background:#fffaf0; }
+.nav-item i { background:#ffffff25;color:inherit; }
+.avatar { background:var(--altfel-teal);color:var(--altfel-ink); }
+.topbar { background:#fffaf1;border-color:#e7dac5; }
+.crumb { color:#8b7d6c; }
+.crumb strong { color:var(--altfel-ink); }
+.status b,.tv-dot.on { background:#3a9b76; }
 .content { max-width:1530px; }
-.page-head h1 { color:#292924; letter-spacing:-1.35px; }
-.page-head p { color:#7b7972; }
-.kicker { color:#9b8057; letter-spacing:1.8px; }
-.panel,.asset-card,.screen-card,.stat { background:#fffefb; border-color:#e8e2d8; box-shadow:0 5px 20px #211d1608; }
-.stat-icon,.screen-symbol { background:#f4efe4; color:#85724f; }
-.stat>strong,.screen-card h3 { color:#302e28; }
-.stat>span { color:#827e72; }
-.btn.primary { background:#262824; color:#fffefa; box-shadow:0 5px 12px #27262016; }
-.btn.primary:hover { background:#44443b; }
-.btn.subtle { background:#fffefa; border-color:#e3ded2; color:#58564d; }
+.page-head h1,.panel h2,.screen-card h3 { color:var(--altfel-ink);letter-spacing:-.045em; }
+.page-head h1 { font-weight:800; }
+.page-head p { color:#756c61; }
+.kicker { color:var(--altfel-coral-deep);font-weight:800;letter-spacing:1.7px; }
+.panel,.asset-card,.screen-card,.stat { background:var(--altfel-white);border:1px solid #eadcc9;box-shadow:0 7px 19px #4129200b; }
+.panel,.stat { border-radius:16px; }
+.stat:nth-child(4n+1) { border-top:4px solid var(--altfel-coral); }
+.stat:nth-child(4n+2) { border-top:4px solid var(--altfel-teal); }
+.stat:nth-child(4n+3) { border-top:4px solid var(--altfel-yellow); }
+.stat:nth-child(4n+4) { border-top:4px solid var(--altfel-ink); }
+.stat-icon,.screen-symbol,.quick-icon { background:#e6eee9;color:#31746a; }
+.stat>strong,.screen-card h3 { color:var(--altfel-ink); }
+.stat>span { color:#746e66; }
+.pill.green { background:#dff0e7;color:#286a56; }
+.btn.primary { background:var(--altfel-coral);color:#fffefa;border:1px solid var(--altfel-coral-deep);
+  box-shadow:0 5px 0 #a6413238;border-radius:11px; }
+.btn.primary:hover { background:var(--altfel-coral-deep); }
+.btn.subtle { background:var(--altfel-white);color:var(--altfel-ink);border-color:#decdb9; }
+.btn.subtle:hover { background:#f3e7d7; }
 .btn:focus-visible,.nav-item:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
-  outline-color:#b49a70; outline-offset:3px;
+  outline:3px solid #80afa5;outline-offset:3px;
+}
+button:disabled { cursor:not-allowed; }
+input,select,textarea { accent-color:var(--altfel-coral); }
+input:focus,select:focus,textarea:focus { border-color:var(--altfel-coral); }
+
+/* Reusable logo sticker: directly references the photo's tilted white bands. */
+.altfel-sticker { display:inline-flex;align-items:center;justify-content:center;max-width:max-content;
+  padding:.14em .40em .22em;color:var(--altfel-ink);background:var(--altfel-white);
+  border-radius:3px 4px 22px 3px;font-family:'Arial Black',Manrope,sans-serif;
+  font-size:36px;font-weight:900;line-height:1;letter-spacing:-.075em;
+  box-shadow:0 9px 24px #25252618;transform:rotate(-7deg);user-select:none;white-space:nowrap;
 }
 .premium-hero {
-  background:linear-gradient(110deg,#222621,#414339);
-  color:#f9f5ec;
-  border:1px solid #b6a27b40;
+  min-height:190px;position:relative;isolation:isolate;overflow:hidden;
+  background:var(--altfel-cream);border:1px solid #e8ccb0;color:var(--altfel-ink);
+  border-radius:22px;padding:31px 36px;gap:30px;
 }
-.premium-hero:after { border-color:#f5eedb0d; box-shadow:0 0 0 40px #f5eedb04,0 0 0 80px #f5eedb03; }
-.premium-hero h2 { color:#fffaf0; }
-.premium-hero p { color:#d1d0c3; }
-.premium-hero .kicker { color:#d7bf91; }
-.premium-hero .btn.primary { background:#e8dbbf; color:#262824; }
-.premium-hero .btn.subtle { border-color:#ffffff46; color:#f7f3e9; }
-.login-illustration { background:#22241f; }
-.toast { background:#33352e; }
-.tv-connect {
-  background:radial-gradient(ellipse at 50% 28%,#303229 0%,#1b1e1b 55%,#111310 100%);
-  color:#fffaf0;
+.premium-hero::before { content:'';position:absolute;right:-68px;top:-95px;
+  width:350px;height:280px;background:var(--altfel-coral);
+  border:4px solid var(--altfel-ink);
+  border-radius:50% 41% 63% 37% / 42% 64% 36% 58%;
+  transform:rotate(-17deg);opacity:.96;z-index:0;pointer-events:none; }
+.premium-hero::after { content:'';position:absolute;right:12%;bottom:-125px;width:370px;height:230px;
+  background:var(--altfel-teal);border:4px solid var(--altfel-ink);
+  border-radius:61% 39% 53% 47% / 59% 45% 55% 41%;transform:rotate(-12deg);
+  z-index:0;pointer-events:none;box-shadow:none;
 }
-.connect-brand span { color:#d5b884; }
-.connect-label { color:#d9c7a6; border-color:#8a837051; }
-.tv-connect p { color:#cccac1; }
-.connect-code { background:#ffffff09; border:1px solid #d6ba8b60; color:#f6e7c9; }
-.connect-status { color:#e1c694; }
-.tv-connect small { color:#aba99f; }
-.tv-body,.tv-stage,.tv-media { background:#111310; }
-.tv-standby { background:radial-gradient(ellipse at 50% 42%,#31332b 0%,#1e211d 54%,#111310 100%); }
-.tv-standby p { color:#d1cdc2; }
-.tv-line { background:#b49a70; }
-.player-empty { background:#111310; }
-.player-empty p { color:#c4c0b5; }
-.tv-indicator { color:#f6edddbb; }
+.premium-hero>div { position:relative;z-index:1; }
+.premium-hero .kicker { color:#8b352e;font-weight:850; }
+.premium-hero h2 { color:var(--altfel-ink);font-size:clamp(24px,2.8vw,35px);font-weight:800;letter-spacing:-.06em; }
+.premium-hero p { color:#48453e;max-width:570px;font-size:13px;line-height:1.6; }
+.premium-hero .btn.primary { color:#fffaf0;background:var(--altfel-ink);border-color:var(--altfel-ink);box-shadow:none; }
+.premium-hero .btn.primary:hover { background:#41413f; }
+.premium-hero .btn.subtle { background:#fff7ed;color:var(--altfel-ink);border-color:#2928274d; }
+.hero-sticker { font-size:26px;margin:13px 0 3px;transform:rotate(-7deg); }
+.premium-hero-actions { align-items:flex-end; }
+
+/* Login cover: the same organic swirls and contour lines as the wall. */
+.login-page { background:var(--altfel-white); }
+.login-illustration { background:var(--altfel-cream);color:var(--altfel-ink);isolation:isolate; }
+.login-illustration::before { content:'';position:absolute;left:-155px;top:13%;width:470px;height:420px;
+  background:var(--altfel-coral);border:4px solid var(--altfel-ink);
+  border-radius:54% 46% 61% 39% / 40% 60% 38% 62%;transform:rotate(-31deg);
+  box-shadow:none;z-index:-1; }
+.login-illustration::after { content:'';position:absolute;right:-160px;bottom:-140px;width:440px;height:340px;
+  background:var(--altfel-teal);border:4px solid var(--altfel-ink);
+  border-radius:43% 57% 37% 63% / 60% 42% 58% 40%;transform:rotate(23deg);z-index:-1; }
+.login-illustration .brand strong { color:var(--altfel-ink); }
+.login-illustration .brand small { color:#5b4e40; }
+.login-illustration .hero-decor { z-index:2; }
+.login-illustration .hero-decor::before { content:'';position:absolute;right:5%;top:10%;
+  background:var(--altfel-yellow);width:105px;height:105px;border-radius:50%;z-index:-1; }
+.login-illustration .hero-decor::after { content:'';position:absolute;right:1%;bottom:10%;
+  border:4px solid var(--altfel-ink);width:150px;height:90px;border-radius:65% 35% 52% 48%;
+  transform:rotate(28deg);z-index:-1; }
+.preview-frame { border-color:var(--altfel-ink);background:var(--altfel-ink);transform:rotate(-4deg); }
+.preview-image { background:linear-gradient(135deg,#d66a54,#ab4436); }
+.login-quote { color:var(--altfel-ink);font-weight:800;text-shadow:0 1px #fff5e744; }
+.login-sticker { position:absolute;right:9%;top:14%;z-index:3;font-size:clamp(23px,3vw,55px);transform:rotate(9deg); }
+.login-content { background:var(--altfel-white); }
+.login-box h1 { color:var(--altfel-ink);font-weight:800; }
+.login-box .kicker { color:var(--altfel-coral-deep); }
+.login-footer { color:#8f8477; }
+.toast { background:var(--altfel-ink); }
+
+/* First pairing / standby only: advertising artwork is never recolored. */
+.tv-connect { position:relative;isolation:isolate;overflow:hidden;
+  background:var(--altfel-cream);color:var(--altfel-ink); }
+.tv-connect::before { content:'';position:absolute;left:-170px;top:-170px;width:570px;height:440px;
+  border-radius:53% 47% 42% 58% / 43% 60% 40% 57%;
+  background:var(--altfel-coral);border:5px solid var(--altfel-ink);
+  transform:rotate(-17deg);z-index:-1; }
+.tv-connect::after { content:'';position:absolute;right:-115px;bottom:-245px;width:530px;height:440px;
+  border-radius:61% 39% 58% 42% / 46% 63% 37% 54%;
+  background:var(--altfel-teal);border:5px solid var(--altfel-ink);
+  transform:rotate(11deg);z-index:-1; }
+.tv-connect>* { position:relative;z-index:1; }
+.connect-brand { color:var(--altfel-ink);display:flex;gap:22px;align-items:center;justify-content:center;flex-wrap:wrap; }
+.connect-brand>span:first-child { color:var(--altfel-coral-deep); }
+.connect-sticker { font-size:clamp(22px,3vw,40px);transform:rotate(-8deg); }
+.connect-label { color:#722c26;background:#fff8ebcc;border:1px solid var(--altfel-coral); }
+.tv-connect h1 { color:var(--altfel-ink);font-weight:850; }
+.tv-connect p { color:#33332e;max-width:780px;font-weight:500; }
+.connect-code { color:var(--altfel-ink);background:var(--altfel-white);
+  border:3px solid var(--altfel-ink);border-radius:18px;box-shadow:8px 8px 0 var(--altfel-coral);
+  max-width:95vw;letter-spacing:9px; }
+.connect-status { color:#7e302b;font-weight:800; }
+.tv-connect small { color:#44423c;font-weight:650; }
+.tv-body,.tv-stage,.tv-media { background:#171919; }
+.tv-standby { position:relative;isolation:isolate;overflow:hidden;
+  background:var(--altfel-cream);color:var(--altfel-ink); }
+.tv-standby::before { content:'';position:absolute;left:-8%;top:-19%;width:43%;height:60%;
+  background:var(--altfel-coral);border:5px solid var(--altfel-ink);
+  border-radius:55% 45% 63% 37% / 38% 66% 34% 62%;transform:rotate(-20deg);z-index:-1; }
+.tv-standby::after { content:'';position:absolute;right:-12%;bottom:-18%;width:54%;height:45%;
+  background:var(--altfel-teal);border:5px solid var(--altfel-ink);
+  border-radius:55% 45% 63% 37% / 38% 66% 34% 62%;transform:rotate(15deg);z-index:-1; }
+.tv-standby .tv-logo { position:relative;color:var(--altfel-ink);font-weight:850;z-index:1; }
+.tv-standby .tv-sticker { font-size:clamp(32px,4.7vw,76px);margin-top:18px;z-index:1; }
+.tv-line { background:var(--altfel-coral);z-index:1; }
+.tv-standby p { color:#3b3934;z-index:1;font-weight:750;font-size:clamp(14px,1.6vw,23px);text-align:center; }
+.player-empty { background:var(--altfel-paper);color:var(--altfel-ink); }
+.player-empty p { color:#645a4c; }
+.tv-indicator { color:#f4efe8b5;text-shadow:0 1px 3px #000b; }
+@media (max-width:900px) {
+ .premium-hero::before { right:-200px; }
+ .premium-hero::after { right:-100px;opacity:.65; }
+ .premium-hero-actions { align-items:stretch; }
+}
 @media (max-width:650px) {
-  .nav-item.active { box-shadow:inset 0 -2px #d6bb8d; }
-  .page-head h1 { letter-spacing:-.8px; }
-  .tv-connect { padding:24px 14px; }
-  .tv-connect p { font-size:clamp(15px,3vw,20px); }
-  .connect-code { max-width:100%; font-size:clamp(32px,9vw,64px); letter-spacing:5px; }
+ .nav-item.active { box-shadow:inset 0 -3px var(--altfel-coral); }
+ .premium-hero { padding:24px 22px; }
+ .premium-hero::before { opacity:.35;right:-245px; }
+ .premium-hero::after { opacity:.23;right:-195px; }
+ .page-head h1 { letter-spacing:-.04em; }
+ .tv-connect { padding:28px 16px;gap:18px; }
+ .tv-connect::before { opacity:.45; }
+ .tv-connect::after { opacity:.35; }
+ .tv-connect p { font-size:clamp(14px,3vw,20px); }
+ .connect-code { font-size:clamp(34px,8vw,64px);letter-spacing:5px;padding:13px; }
+ .connect-brand { gap:12px; }
+ .hero-sticker { font-size:24px; }
+}
+@media (prefers-reduced-motion:reduce) {
+ .altfel-sticker,.brand-symbol { transition:none; }
 }
