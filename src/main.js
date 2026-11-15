@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import './styles.css';
-import { startConnect, tvPing } from './tv-connect.js';
+import { startConnect, tvPing, installation } from './tv-connect.js';
 import './tv-fleet.css';
 import { createAudioPlayback } from './audio-playback.js';
 import { renderAudioView } from './audio-admin.js';
@@ -873,10 +873,19 @@ function startPlayer(){
   let clearPortraitBackdrop=()=>{};
   const standby=(msg='Conținutul va apărea în curând.')=>{posters.reset();clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><span class="altfel-sticker tv-sticker" aria-hidden="true">#altfel</span><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
+  const reportTV=(asset,event,elapsed=0)=>{
+    const device=installation(false);
+    if(!device||!asset?.id)return;
+    supabase.rpc('log_screenflow_tv_media',{
+      p_installation_id:device.id,p_secret:device.secret,p_asset_id:asset.id,
+      p_event_name:event,p_duration_ms:Math.max(0,Math.min(3600000,Math.round(elapsed)||0))
+    }).then(()=>{}).catch(()=>{});
+  };
   const retryMedia=(my,reason)=>{
     if(my!==token||blocked)return;
     clearTimeout(timer);
     failedMediaCount=Math.min(6,failedMediaCount+1);
+    reportTV(current[index],'failed');
     videoProblem=reason;
     indicator.textContent=reason+' · reîncercare automată';
     timer=setTimeout(()=>{if(my===token)next();},mediaRetryDelayMs(failedMediaCount));
@@ -911,16 +920,18 @@ function startPlayer(){
     const a=current[index];if(!a){index=0;play();return;}
     const url=getUrl(a.storage_path);
     if(a.kind==='image'){
+      let imageReadyAt=0;
       const video=stage.querySelector('video');if(video)video.pause();
       videoProblem='';audio.mediaChanged('image');
       // Synchronized screens keep the shared clock; other screens start the
       // poster's full display time only when the image is ready to be shown.
-      timer=setTimeout(()=>{if(my===token)next();},sync?(remaining??duration(a)):15000);
+      timer=setTimeout(()=>{if(my===token){if(imageReadyAt)reportTV(a,'completed',Date.now()-imageReadyAt);next();}},sync?(remaining??duration(a)):15000);
       posters.show(url,{
         onReady:()=>{
           if(my!==token)return;
           failedMediaCount=0;
-          if(!sync){clearTimeout(timer);timer=setTimeout(()=>{if(my===token)next();},duration(a));}
+          imageReadyAt=Date.now();reportTV(a,'started');
+          if(!sync){clearTimeout(timer);timer=setTimeout(()=>{if(my===token){reportTV(a,'completed',Date.now()-imageReadyAt);next();}},duration(a));}
           const upcoming=pending?.[0]||current[(index+1)%current.length];
           posters.preload(upcoming?.kind==='image'?getUrl(upcoming.storage_path):null);
         },
@@ -930,7 +941,7 @@ function startPlayer(){
       posters.reset();
       stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.src=url;
-      const beganAt=Date.now();let firstVideoFrame=true;
+      const beganAt=Date.now();let firstVideoFrame=true,videoStartedAt=0;
       let waitTimer=null;
       const watchBuffer=()=>{
         if(waitTimer!==null)return;
@@ -952,8 +963,8 @@ function startPlayer(){
       };
       video.onwaiting=()=>{if(my===token){indicator.textContent='Videoclipul se încarcă…';videoProblem='Video: buffering';watchBuffer();}};
       video.onstalled=()=>{if(my===token){indicator.textContent='Video: conexiune lentă sau fișier greu';videoProblem='Video: stalled';watchBuffer();}};
-      video.onplaying=()=>{if(my===token){clearBufferWatch();failedMediaCount=0;indicator.textContent='';if(firstVideoFrame){firstVideoFrame=false;const delay=Date.now()-beganAt;videoProblem=delay>2500?'Video: pornire în '+(delay/1000).toFixed(1)+' secunde':'';}else videoProblem='';if(sync)align();}};
-      video.onended=()=>{if(my===token){clearBufferWatch();next();}};
+      video.onplaying=()=>{if(my===token){clearBufferWatch();failedMediaCount=0;indicator.textContent='';if(firstVideoFrame){firstVideoFrame=false;videoStartedAt=Date.now();reportTV(a,'started');const delay=Date.now()-beganAt;videoProblem=delay>2500?'Video: pornire în '+(delay/1000).toFixed(1)+' secunde':'';}else videoProblem='';if(sync)align();}};
+      video.onended=()=>{if(my===token){clearBufferWatch();if(videoStartedAt)reportTV(a,'completed',Date.now()-videoStartedAt);next();}};
       video.onerror=()=>{if(my===token){clearBufferWatch();retryMedia(my,'Video: eroare codec/rețea');}};
       watchBuffer(); // Detect a blank screen even if the browser never fires waiting/stalled.
       audio.prepareVideo(video).catch(()=>{if(my===token){clearBufferWatch();retryMedia(my,'Redarea video a fost blocată');}});
