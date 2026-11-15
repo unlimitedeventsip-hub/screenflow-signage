@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import './styles.css';
-import { startConnect, tvPing } from './tv-connect.js';
+import { startConnect, tvPing, installation } from './tv-connect.js';
 import './tv-fleet.css';
 import { createAudioPlayback } from './audio-playback.js';
 import { renderAudioView } from './audio-admin.js';
@@ -26,6 +26,7 @@ import {createPosterTransitions} from './poster-transitions.js';
 import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs,playerDiagnosticError,isLegacyProgressMessage} from './player-recovery.js';
 import './poster-transitions.css';
 import './altfel-theme.css';
+import {renderAnalyticsAdmin,exportAnalyticsCsv} from './analytics-admin.js';
 setupPWA();
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
@@ -64,11 +65,11 @@ if (!configured) {
 } else if (location.pathname.startsWith('/manage')) {
   renderReservationManager({root,supabase,supabaseUrl:URL,slug:location.pathname.split('/')[2]||''});
 } else if (location.pathname.startsWith('/g/')) {
-  renderGuestHub({root,supabaseUrl:URL,slug:location.pathname.split('/')[2]||''});
+  renderGuestHub({root,supabase,supabaseUrl:URL,slug:location.pathname.split('/')[2]||''});
 } else if (location.pathname.startsWith('/join/')) {
   const eventId=location.pathname.split('/')[2]||'';
   if(/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(eventId))
-    renderInteractivePage({root,supabaseUrl:URL,eventId});
+    renderInteractivePage({root,supabase,supabaseUrl:URL,eventId});
   else root.innerHTML='<main class="player-empty"><h1>Link de eveniment invalid.</h1></main>';
 } else if (location.pathname==='/connect') {
   startConnect(supabase,root);
@@ -80,8 +81,8 @@ if (!configured) {
 
 async function startAdmin() {
   let state = { session:null, isAdmin:false, loading:true, busy:false, view:'overview',
-    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'menu', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null, playbackEvents:[],guestHubs:[],guestReservations:[],guestLocation:null,mirrorTarget:null,mirrorActive:false,mirrorStatus:'' };
-  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Experiențe TV'],['guests','external','Clienți & QR'],['mirror','monitor','Partajare ecran'],['diagnostics','settings','Diagnostic TV'],['locations','pin','Locații'] ];
+    locations:[], playlists:[], assets:[], items:[], screens:[], installations:[], fleetReady:false, tracks:[], audioReady:false, audioError:'', selectedPlaylist:null, error:'', toast:'', audioUploadProgress:null, smartItems:[], smartLocation:null, smartMode:'menu', smartReady:false, instagramConnections:[], interactiveEvents:[], karaokeQueue:[],controls:[],tvCommands:[],agentStatuses:[],agentPairInfo:null, playbackEvents:[],guestHubs:[],guestReservations:[],guestLocation:null,mirrorTarget:null,mirrorActive:false,mirrorStatus:'', analytics:null,analyticsDays:7,analyticsLocation:'',analyticsLoading:false,analyticsError:'',accessRequests:[],authView:'login',signupNotice:'' };
+  const NAV = [ ['overview','grid','Panou general'],['screens','monitor','Televizoare Live'],['assets','image','Bibliotecă media'],['playlists','list','Playlisturi'],['audio','volume','Sunet & muzică'],['smart','grid','Experiențe TV'],['guests','external','Clienți & QR'],['mirror','monitor','Partajare ecran'],['diagnostics','settings','Diagnostic TV'],['analytics','grid','Statistici & conturi'],['locations','pin','Locații'] ];
   const mirrorSender=createMirrorSender({supabase,displayEndpoint:URL+'/functions/v1/screenflow-display',onChange:({active,status,stream})=>{
     const changed=state.mirrorActive!==active;
     state.mirrorActive=active;state.mirrorStatus=status;
@@ -187,6 +188,7 @@ async function startAdmin() {
     const {data,error}=await supabase.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();
     state.isAdmin=!error && !!data;
     if(state.isAdmin){try{await load();}catch(e){state.error=e.message;}}
+    else { try{await supabase.rpc('request_screenflow_access');}catch{} }
     state.loading=false; render();
   }
   await validate();
@@ -195,6 +197,32 @@ async function startAdmin() {
     try{await refreshDevices();if(!document.activeElement?.matches('input,textarea,select') && ['overview','screens'].includes(state.view))render();}catch{}
   },15000);
 
+  let analyticsRequestId=0;
+  let analyticsMaintenanceDone=false;
+  async function loadAnalytics(){
+    const requestId=++analyticsRequestId;
+    if(!state.isAdmin)return;
+    state.analyticsLoading=true;state.analyticsError='';state.analytics=null;
+    if(state.view==='analytics')render();
+    try{
+      if(!analyticsMaintenanceDone){
+        analyticsMaintenanceDone=true;
+        // Delete metrics older than 90 days when an authorized admin opens reports.
+        await supabase.rpc('purge_screenflow_analytics');
+      }
+      const [report,requests]=await Promise.all([
+        supabase.rpc('get_screenflow_analytics_report',{
+          p_days:state.analyticsDays,p_location_id:state.analyticsLocation||null
+        }),
+        supabase.rpc('list_screenflow_access_requests')
+      ]);
+      if(requestId!==analyticsRequestId)return;
+      if(report.error)throw report.error;
+      if(requests.error)throw requests.error;
+      state.analytics=report.data||null;state.accessRequests=requests.data||[];
+    }catch(e){if(requestId===analyticsRequestId)state.analyticsError=e.message||'Raportul nu este disponibil.';}
+    finally{if(requestId===analyticsRequestId){state.analyticsLoading=false;if(state.view==='analytics')render();}}
+  }
   function frame(content) {
     const title = NAV.find(n=>n[0]===state.view)?.[2] || 'Panou general';
     return `<div class="dashboard"><aside class="sidebar">
@@ -322,16 +350,27 @@ async function startAdmin() {
         '<p class="tv-empty">Nu avem încă evenimente de redare înregistrate. Apar la următoarea schimbare de material sau stare.</p>')+
       '</section>';
   }
-  function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>POWERED BY #ALTFEL</small></div></div><span class="altfel-sticker login-sticker" aria-hidden="true">#altfel</span><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
-  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),guests:()=>renderGuestAdmin({state,heading}),mirror:()=>renderMirrorAdmin({state,heading}),diagnostics:diagnosticsView,screens:screensView,locations:locationsView})[state.view]?.()||overview()); if(state.view==='guests')hydrateGuestQR(root,state); if(state.view==='mirror')hydrateMirror();}
+  function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>POWERED BY #ALTFEL</small></div></div><span class="altfel-sticker login-sticker" aria-hidden="true">#altfel</span><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>${state.authView==='signup'&&!denied?'Creează-ți contul.':'Bine ai revenit.'}</h1><p>${state.authView==='signup'&&!denied?'Înregistrează-te cu emailul tău. Un administrator trebuie să aprobe accesul după confirmarea adresei.':'Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.'}</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este în așteptarea aprobării. Cererea a fost înregistrată; un administrator existent trebuie să confirme accesul.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:state.authView==='signup'?`<form data-form="signup" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="email"></label><label>Parolă nouă · minimum 10 caractere<input type="password" name="password" minlength="10" required autocomplete="new-password"></label><button class="btn primary full" type="submit">Creează contul ${icon('arrow',18)}</button></form>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}${state.signupNotice?`<div class="alert">${safe(state.signupNotice)}</div>`:'' }${denied?'':`<button class="auth-switch" type="button" data-action="auth-toggle">${state.authView==='signup'?'Ai deja cont? Autentifică-te':'Nu ai cont? Creează unul'}</button>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
+  function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),guests:()=>renderGuestAdmin({state,heading}),mirror:()=>renderMirrorAdmin({state,heading}),diagnostics:diagnosticsView,analytics:()=>renderAnalyticsAdmin({state,heading}),screens:screensView,locations:locationsView})[state.view]?.()||overview()); if(state.view==='guests')hydrateGuestQR(root,state); if(state.view==='mirror')hydrateMirror();}
   async function perform(op,success){state.busy=true;state.error='';render();try{await op();await load();state.busy=false;toast(success||'Modificările au fost salvate.');}catch(e){state.busy=false;showError(e.message);} }
   async function insert(table,record){const {error}=await supabase.from(table).insert(record);if(error)throw error;}
   async function patch(table,id,record){const {error}=await supabase.from(table).update(record).eq('id',id);if(error)throw error;}
   async function remove(table,id){const {error}=await supabase.from(table).delete().eq('id',id);if(error)throw error;}
   root.addEventListener('click',async e=>{
-    const nav=e.target.closest('[data-nav]'); if(nav){state.view=nav.dataset.nav;render();return;}
+    const nav=e.target.closest('[data-nav]'); if(nav){state.view=nav.dataset.nav;render();if(state.view==='analytics')loadAnalytics();return;}
     const el=e.target.closest('[data-action]');if(!el)return;
     const a=el.dataset.action,id=el.dataset.id;
+    if(a==='auth-toggle'){state.authView=state.authView==='login'?'signup':'login';state.error='';state.signupNotice='';render();return;}
+    if(a==='analytics-refresh'){loadAnalytics();return;}
+    if(a==='analytics-export'&&state.analytics){exportAnalyticsCsv(state.analytics);return;}
+    if(a==='analytics-approve-access'){
+      const request=state.accessRequests.find(x=>x.user_id===id);
+      if(!request)return;
+      if(!window.confirm('Confirmi acordarea accesului COMPLET de administrator pentru '+request.email+'?'))return;
+      const {data,error}=await supabase.rpc('approve_screenflow_access',{p_user_id:id});
+      if(error||!data){showError(error?.message||'Aprobarea nu a reușit.');return;}
+      await loadAnalytics();toast('Contul a fost aprobat ca administrator.');return;
+    }
     if(a.startsWith('ai-')){
       const panel=el.closest('[data-ai-studio]'),mode=panel?.dataset.aiStudio;if(!panel)return;
       const output=panel.querySelector('[data-ai-preview]');
@@ -560,6 +599,8 @@ async function startAdmin() {
   root.addEventListener('input',e=>{const panel=e.target.closest('[data-ai-studio]');if(panel&&e.target.matches('[data-ai-json]'))panel.querySelector('[data-action="ai-publish"]').disabled=true;});
   root.addEventListener('change',e=>{
     const input=e.target;
+    if(input?.matches('[data-analytics-days]')){state.analyticsDays=Number(input.value)||7;loadAnalytics();return;}
+    if(input?.matches('[data-analytics-location]')){state.analyticsLocation=input.value||'';loadAnalytics();return;}
     if(input?.matches('[data-guest-location]')){state.guestLocation=input.value;render();return;}
     if(input?.matches('[data-mirror-target]')){state.mirrorTarget=input.value;return;}
     if(input?.name==='location_id'&&input.closest('form[data-form="smart-location"]')){
@@ -577,7 +618,15 @@ async function startAdmin() {
       Object.assign(record,{title:val('title'),description:val('description'),enabled:form.has('enabled'),booking_enabled:form.has('booking_enabled'),qr_on_tv:form.has('qr_on_tv')});
       perform(()=>patch('guest_hubs',id,record),'Pagina clienților a fost actualizată. Codul QR rămâne același.');return;
     }
-    if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else await validate();return;}
+    if(type==='login') {state.error='';state.busy=true;const {error}=await supabase.auth.signInWithPassword({email:val('email'),password:val('password')});state.busy=false;if(error)showError(error.message);else {await validate();if(state.isAdmin)supabase.rpc('log_screenflow_admin_login').then(()=>{}).catch(()=>{});}return;}
+    if(type==='signup'){
+      if(val('password').length<10){showError('Alege o parolă de cel puțin 10 caractere.');return;}
+      state.busy=true;const {error}=await supabase.auth.signUp({email:val('email'),password:val('password'),options:{emailRedirectTo:location.origin+'/admin'}});
+      state.busy=false;
+      if(error){showError(error.message);return;}
+      state.authView='login';state.signupNotice='Contul a fost solicitat. Verifică emailul, confirmă adresa, apoi autentifică-te. Accesul necesită aprobarea administratorului.';
+      await validate();return;
+    }
     if(type==='device-control'){
       if(!state.screens.some(x=>x.id===id))return;
       const ip=val('control_ip'),mac=val('control_mac'),protocol=val('control_type');
@@ -833,10 +882,19 @@ function startPlayer(){
   let clearPortraitBackdrop=()=>{};
   const standby=(msg='Conținutul va apărea în curând.')=>{posters.reset();clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><span class="altfel-sticker tv-sticker" aria-hidden="true">#altfel</span><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
+  const reportTV=(asset,event,elapsed=0)=>{
+    const device=installation(false);
+    if(!device||!asset?.id)return;
+    supabase.rpc('log_screenflow_tv_media',{
+      p_installation_id:device.id,p_secret:device.secret,p_asset_id:asset.id,
+      p_event_name:event,p_duration_ms:Math.max(0,Math.min(3600000,Math.round(elapsed)||0))
+    }).then(()=>{}).catch(()=>{});
+  };
   const retryMedia=(my,reason)=>{
     if(my!==token||blocked)return;
     clearTimeout(timer);
     failedMediaCount=Math.min(6,failedMediaCount+1);
+    reportTV(current[index],'failed');
     videoProblem=reason;
     indicator.textContent=reason+' · reîncercare automată';
     timer=setTimeout(()=>{if(my===token)next();},mediaRetryDelayMs(failedMediaCount));
@@ -871,16 +929,18 @@ function startPlayer(){
     const a=current[index];if(!a){index=0;play();return;}
     const url=getUrl(a.storage_path);
     if(a.kind==='image'){
+      let imageReadyAt=0;
       const video=stage.querySelector('video');if(video)video.pause();
       videoProblem='';audio.mediaChanged('image');
       // Synchronized screens keep the shared clock; other screens start the
       // poster's full display time only when the image is ready to be shown.
-      timer=setTimeout(()=>{if(my===token)next();},sync?(remaining??duration(a)):15000);
+      timer=setTimeout(()=>{if(my===token){if(imageReadyAt)reportTV(a,'completed',Date.now()-imageReadyAt);next();}},sync?(remaining??duration(a)):15000);
       posters.show(url,{
         onReady:()=>{
           if(my!==token)return;
           failedMediaCount=0;
-          if(!sync){clearTimeout(timer);timer=setTimeout(()=>{if(my===token)next();},duration(a));}
+          imageReadyAt=Date.now();reportTV(a,'started');
+          if(!sync){clearTimeout(timer);timer=setTimeout(()=>{if(my===token){reportTV(a,'completed',Date.now()-imageReadyAt);next();}},duration(a));}
           const upcoming=pending?.[0]||current[(index+1)%current.length];
           posters.preload(upcoming?.kind==='image'?getUrl(upcoming.storage_path):null);
         },
@@ -890,7 +950,7 @@ function startPlayer(){
       posters.reset();
       stage.innerHTML='<video class="tv-media" playsinline preload="auto"></video>';
       const video=stage.querySelector('video');video.src=url;
-      const beganAt=Date.now();let firstVideoFrame=true;
+      const beganAt=Date.now();let firstVideoFrame=true,videoStartedAt=0;
       let waitTimer=null;
       const watchBuffer=()=>{
         if(waitTimer!==null)return;
@@ -912,8 +972,8 @@ function startPlayer(){
       };
       video.onwaiting=()=>{if(my===token){indicator.textContent='Videoclipul se încarcă…';videoProblem='Video: buffering';watchBuffer();}};
       video.onstalled=()=>{if(my===token){indicator.textContent='Video: conexiune lentă sau fișier greu';videoProblem='Video: stalled';watchBuffer();}};
-      video.onplaying=()=>{if(my===token){clearBufferWatch();failedMediaCount=0;indicator.textContent='';if(firstVideoFrame){firstVideoFrame=false;const delay=Date.now()-beganAt;videoProblem=delay>2500?'Video: pornire în '+(delay/1000).toFixed(1)+' secunde':'';}else videoProblem='';if(sync)align();}};
-      video.onended=()=>{if(my===token){clearBufferWatch();next();}};
+      video.onplaying=()=>{if(my===token){clearBufferWatch();failedMediaCount=0;indicator.textContent='';if(firstVideoFrame){firstVideoFrame=false;videoStartedAt=Date.now();reportTV(a,'started');const delay=Date.now()-beganAt;videoProblem=delay>2500?'Video: pornire în '+(delay/1000).toFixed(1)+' secunde':'';}else videoProblem='';if(sync)align();}};
+      video.onended=()=>{if(my===token){clearBufferWatch();if(videoStartedAt)reportTV(a,'completed',Date.now()-videoStartedAt);next();}};
       video.onerror=()=>{if(my===token){clearBufferWatch();retryMedia(my,'Video: eroare codec/rețea');}};
       watchBuffer(); // Detect a blank screen even if the browser never fires waiting/stalled.
       audio.prepareVideo(video).catch(()=>{if(my===token){clearBufferWatch();retryMedia(my,'Redarea video a fost blocată');}});

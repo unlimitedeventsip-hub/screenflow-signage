@@ -86,7 +86,7 @@ export function createDisplayExperience({supabaseUrl,publicId,isAllowed=()=>true
   if(!slug)return;
   qr=document.createElement('aside');qr.className='tv-guest-qr';qr.innerHTML='<img alt="Meniu, rezervări și evenimente"><span>Scanează & descoperă<small>Meniu · Rezervări · Party</small></span>';
   document.body.appendChild(qr);const image=qr.querySelector('img');
-  QRCode.toDataURL(location.origin+'/g/'+slug,{width:210,margin:3,errorCorrectionLevel:'M'}).then(src=>{if(image.isConnected)image.src=src;});
+  QRCode.toDataURL(location.origin+'/g/'+slug+'?src=tvqr',{width:210,margin:3,errorCorrectionLevel:'M'}).then(src=>{if(image.isConnected)image.src=src;});
  }
  async function accept(session){
   clearMirror();id=session.id;const mine=generation;connecting=true;

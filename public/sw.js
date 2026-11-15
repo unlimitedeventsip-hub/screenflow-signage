@@ -1,7 +1,7 @@
 /* Screenflow offline-first service worker. The TV caches the app shell and the
  * EXACT media URLs fetched by the paired player. No admin session or secrets.
  * Media must be available as a full HTTP 200 response before going offline. */
-const SHELL = 'screenflow-shell-v28-altfel-wall-identity';
+const SHELL = 'screenflow-shell-v30-insights-proof-of-play';
 const MEDIA = 'screenflow-media-v24';
 const PREFIX = 'screenflow-shell-';
 const ROOT = '/';
