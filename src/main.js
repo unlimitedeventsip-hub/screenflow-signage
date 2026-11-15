@@ -25,6 +25,7 @@ import {aiPrompt,parseAIImport} from './ai-import.js';
 import {createPosterTransitions} from './poster-transitions.js';
 import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs} from './player-recovery.js';
 import './poster-transitions.css';
+import './altfel-theme.css';
 setupPWA();
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
