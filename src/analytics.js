@@ -9,10 +9,11 @@ const TYPES=new Set(['hub_view','menu_open','menu_search','menu_item_view',
 
 function storageGet(storage,key){try{return storage.getItem(key);}catch{return null;}}
 function storageSet(storage,key,value){try{storage.setItem(key,value);}catch{}}
-function getSource(){
-  const raw=new URLSearchParams(location.search).get('src');
+export function attributionSource(search=''){
+  const raw=new URLSearchParams(search).get('src');
   return ({tvqr:'tv_qr',printqr:'print_qr',shared:'shared'})[raw]||'direct';
 }
+const getSource=()=>attributionSource(location.search);
 export function createGuestAnalytics({supabase,slug='',eventId=null,root,initialEvent='hub_view'}){
  let choice=storageGet(localStorage,ANALYTICS_CONSENT_KEY);
  const dnt=navigator.doNotTrack==='1'||window.doNotTrack==='1';
