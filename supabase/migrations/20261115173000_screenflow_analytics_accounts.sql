@@ -155,8 +155,8 @@ begin
   return jsonb_build_object(
     'days',d,'generated_at',now(),
     'web_events',coalesce((
-      select jsonb_agg(to_jsonb(t) order by t.day,t.location_id,t.event_name) from (
-        select (a.occurred_at at time zone 'Europe/Bucharest')::date day,
+      select jsonb_agg(to_jsonb(t) order by t.report_date,t.location_id,t.event_name) from (
+        select (a.occurred_at at time zone 'Europe/Bucharest')::date as report_date,
           h.location_id,a.event_name,a.source,count(*)::integer events,count(distinct a.session_id)::integer sessions
         from public.screenflow_analytics_events a
         join public.guest_hubs h on h.id=a.hub_id
