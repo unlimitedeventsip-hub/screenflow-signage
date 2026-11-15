@@ -1,4 +1,5 @@
 import './interactive-page.css';
+import {createGuestAnalytics} from './analytics.js';
 
 const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const endpoint=url=>url+'/functions/v1/screenflow-interactive';
@@ -12,7 +13,7 @@ function visitorId(){
  }
  return token;
 }
-export async function renderInteractivePage({root,supabaseUrl,eventId}){
+export async function renderInteractivePage({root,supabase,supabaseUrl,eventId}){
  document.title='Screenflow · Participă';
  document.body.classList.add('interactive-body');
  const endpointUrl=endpoint(supabaseUrl);
@@ -112,6 +113,11 @@ export async function renderInteractivePage({root,supabaseUrl,eventId}){
   }catch(e){button.disabled=false;error(e.message||'Nu s-a putut trimite.');}
  });
  await refresh();
+ if(state){
+  const analytics=createGuestAnalytics({supabase,root,eventId,
+    initialEvent:state.kind==='quiz'?'quiz_view':'event_open'});
+  analytics.init();
+ }
  // Keep public vote counts and karaoke status current while the page is open.
  setInterval(()=>{if(!document.hidden&&(submitted||state?.stage))refresh();},2500);
 }
