@@ -23,7 +23,7 @@ import {renderReservationManager} from './reservation-manager.js';
 import {setupPWA} from './pwa.js';
 import {aiPrompt,parseAIImport} from './ai-import.js';
 import {createPosterTransitions} from './poster-transitions.js';
-import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs} from './player-recovery.js';
+import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs,playerDiagnosticError} from './player-recovery.js';
 import './poster-transitions.css';
 import './altfel-theme.css';
 setupPWA();
@@ -809,7 +809,6 @@ function startPlayer(){
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
   const posters=createPosterTransitions({stage});
   let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null, videoProblem='';
-  const cacheKey=`screenflow:manifest:${publicId}`;
   let offlinePlayback=false;
   let failedMediaCount=0;
   const upstreamUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
@@ -913,6 +912,7 @@ function startPlayer(){
       video.onplaying=()=>{if(my===token){clearBufferWatch();failedMediaCount=0;indicator.textContent='';if(firstVideoFrame){firstVideoFrame=false;const delay=Date.now()-beganAt;videoProblem=delay>2500?'Video: pornire în '+(delay/1000).toFixed(1)+' secunde':'';}else videoProblem='';if(sync)align();}};
       video.onended=()=>{if(my===token){clearBufferWatch();next();}};
       video.onerror=()=>{if(my===token){clearBufferWatch();retryMedia(my,'Video: eroare codec/rețea');}};
+      watchBuffer(); // Detect a blank screen even if the browser never fires waiting/stalled.
       audio.prepareVideo(video).catch(()=>{if(my===token){clearBufferWatch();retryMedia(my,'Redarea video a fost blocată');}});
       timer=setTimeout(()=>{if(my===token)next();},remaining??60*60*1000);
     } else next();
@@ -972,9 +972,6 @@ function startPlayer(){
       first=true;signature='';current=[];pending=null;index=0;
     }
     const items=Array.isArray(data.items)?data.items:[];
-    if(!isOffline){
-      try{localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));}catch{}
-    }
     if(!isOffline)indicator.textContent='';
     const newSync=Boolean(data.synchronized&&data.sync_anchor),newAnchor=Date.parse(data.sync_anchor||'');
     const newSignature=JSON.stringify({items,newSync,anchor:data.sync_anchor});
@@ -1033,14 +1030,9 @@ function startPlayer(){
         if(!blocked)indicator.textContent='OFFLINE · Redare din memoria TV';
       }else {
         indicator.textContent='Internet indisponibil · nu avem încă un playlist salvat integral';
-        if(first){
-          try{
-            const older=JSON.parse(localStorage.getItem(cacheKey));
-            if(older?.items?.length){
-              current=older.items;first=false;play();
-            }else standby('Așteptăm conexiunea la internet...');
-          }catch{standby('Așteptăm conexiunea la internet...');}
-        }
+        // A manifest containing URLs is not a complete offline copy.
+        // Do not show network-only media as an offline fallback.
+        if(first)standby('Așteptăm conexiunea la internet...');
       }
     }finally{refreshing=false;}
   }
@@ -1048,7 +1040,7 @@ function startPlayer(){
   async function heartbeat(){
     if(reporting)return;reporting=true;
     try{
-      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':smartModeActive||current.length?'playing':'waiting'),error:videoProblem||offline.currentStatus()});
+      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':smartModeActive||current.length?'playing':'waiting'),error:playerDiagnosticError(videoProblem,offline.currentStatus())});
       if(r?.status==='pending')location.replace('/connect');
       if(r?.status==='approved' && r.screen_public_id && r.screen_public_id!==publicId)location.replace('/play/'+r.screen_public_id);
     }catch(e){console.warn('TV heartbeat',e?.message)}
