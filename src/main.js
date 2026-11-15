@@ -23,7 +23,7 @@ import {renderReservationManager} from './reservation-manager.js';
 import {setupPWA} from './pwa.js';
 import {aiPrompt,parseAIImport} from './ai-import.js';
 import {createPosterTransitions} from './poster-transitions.js';
-import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs,playerDiagnosticError} from './player-recovery.js';
+import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs,playerDiagnosticError,isLegacyProgressMessage} from './player-recovery.js';
 import './poster-transitions.css';
 import './altfel-theme.css';
 setupPWA();
@@ -131,7 +131,7 @@ async function startAdmin() {
     const background=recent&&t.playback_state==='background';
     const status=active?'APLICAȚIE ONLINE':background?'APLICAȚIE ÎN FUNDAL':'FĂRĂ RĂSPUNS';
     const asset=state.assets.find(a=>a.id===t.current_asset_id);
-    return '<div class="tv-state"><span class="'+(active?'tv-dot on':'tv-dot')+'"></span><strong>'+status+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Ultimul material: '+safe(asset.title):'Ultima stare: '+safe(t.playback_state||'—'))+'</small>'+(t.error_message?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'<small>Ultimul contact: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small>'+(active?'':'<small>Nu putem distinge automat între TV oprit, standby, aplicație închisă sau lipsă internet.</small>')+'</div>';
+    return '<div class="tv-state"><span class="'+(active?'tv-dot on':'tv-dot')+'"></span><strong>'+status+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Ultimul material: '+safe(asset.title):'Ultima stare: '+safe(t.playback_state||'—'))+'</small>'+(t.error_message&&!isLegacyProgressMessage(t.error_message)?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'<small>Ultimul contact: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small>'+(active?'':'<small>Nu putem distinge automat între TV oprit, standby, aplicație închisă sau lipsă internet.</small>')+'</div>';
 }
   async function load() {
     const [locations,playlists,assets,items,screens] = await Promise.all([
@@ -300,22 +300,25 @@ async function startAdmin() {
       return '<div class="diagnostic-screen"><strong>'+safe(s.name)+'</strong>'+
         '<span class="pill '+(fresh&&!bg?'green':'gray')+'">'+status+'</span>'+
         '<small>'+(seconds===null?'Niciun heartbeat':'Ultimul heartbeat acum '+seconds+' secunde')+'</small>'+
-        (t?.error_message?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'</div>';
+        (t?.error_message&&!isLegacyProgressMessage(t.error_message)?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'</div>';
     }).join('');
-    const history=state.playbackEvents.map(item=>{
+    // Keep historical rows in the database, but hide cache-success messages
+    // previously tagged as errors by older TV clients.
+    const historyRows=state.playbackEvents.filter(item=>item.event_type!=='error'||!isLegacyProgressMessage(item.error_message));
+    const history=historyRows.map(item=>{
       const tv=state.screens.find(x=>x.id===item.screen_id);
       const asset=state.assets.find(x=>x.id===item.asset_id);
       return '<tr><td>'+safe(new Date(item.occurred_at).toLocaleString('ro-RO'))+'</td>'+
         '<td>'+safe(tv?.name||'TV dezactivat')+'</td>'+
         '<td>'+safe(item.event_type)+'</td><td>'+safe(asset?.title||'—')+'</td>'+
-        '<td>'+safe(item.playback_state||'—')+'</td></tr>';
+        '<td>'+safe(item.playback_state||'—')+'</td><td>'+safe(item.event_type==='error'?item.error_message||'Eroare nespecificată':'—')+'</td></tr>';
     }).join('');
     return heading('MONITORIZARE','Diagnostic și jurnal TV',
       'Ultimele materiale transmise, erori și televizoare fără heartbeat. Un TV fără răspuns poate fi oprit, fără internet sau poate avea aplicația închisă.')+
       '<section class="panel"><div class="panel-head"><h2>Stare dispozitive</h2></div>'+
       '<div class="diagnostic-screens">'+rows+'</div></section>'+
-      '<section class="panel"><div class="panel-head"><h2>Jurnalul ultimelor 120 de evenimente</h2><span>90 ZILE RETENȚIE</span></div>'+
-      (history?'<div class="diagnostic-table-wrap"><table class="diagnostic-table"><thead><tr><th>Data</th><th>TV</th><th>Eveniment</th><th>Material</th><th>Stare</th></tr></thead><tbody>'+history+'</tbody></table></div>':
+      '<section class="panel"><div class="panel-head"><h2>Jurnal TV · '+historyRows.length+' evenimente utile</h2><span>90 ZILE RETENȚIE</span></div>'+
+      (history?'<div class="diagnostic-table-wrap"><table class="diagnostic-table"><thead><tr><th>Data</th><th>TV</th><th>Eveniment</th><th>Material</th><th>Stare</th><th>Detalii / eroare</th></tr></thead><tbody>'+history+'</tbody></table></div>':
         '<p class="tv-empty">Nu avem încă evenimente de redare înregistrate. Apar la următoarea schimbare de material sau stare.</p>')+
       '</section>';
   }
