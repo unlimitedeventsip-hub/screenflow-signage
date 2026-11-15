@@ -68,7 +68,7 @@ export function createGuestAnalytics({supabase,slug='',eventId=null,root,initial
    settings.textContent='Preferințe statistici';
    settings.addEventListener('click',showBanner);
    root.appendChild(settings);
-   if(dnt){choice='no';return;}
+   if(dnt){choice='no';settings.textContent='Statistici dezactivate (Do Not Track)';settings.disabled=true;return;}
    if(choice===null)showBanner();
    else if(choice==='yes'){
      track(initialEvent);
