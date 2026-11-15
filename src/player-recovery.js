@@ -16,3 +16,8 @@ export function playerDiagnosticError(videoStatus='',offlineStatus='') {
   if (/^(?:Offline incomplet|Offline indisponibil|Offline:)/i.test(cache)) return cache.slice(0,140);
   return '';
 }
+
+export function isLegacyProgressMessage(value='') {
+  return /^(?:Pregătire offline|Offline pregătit:|Salvare offline:|Salvare media locală|OFFLINE ·)/i
+    .test(String(value||'').trim());
+}
