@@ -199,7 +199,7 @@ async function startAdmin() {
 
   async function loadAnalytics(){
     if(!state.isAdmin)return;
-    state.analyticsLoading=true;state.analyticsError='';
+    state.analyticsLoading=true;state.analyticsError='';state.analytics=null;
     if(state.view==='analytics')render();
     try{
       const [report,requests]=await Promise.all([
