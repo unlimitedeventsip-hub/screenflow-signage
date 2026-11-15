@@ -194,3 +194,50 @@ input:focus,select:focus,textarea:focus { border-color:var(--altfel-coral); }
 @media (prefers-reduced-motion:reduce) {
  .altfel-sticker,.brand-symbol { transition:none; }
 }
+
+/* Only ScreenFlow-generated TV experiences use this theme. Customer images
+   and videos keep their natural colors and dimensions. */
+.connect-brand .connect-sticker { color:var(--altfel-ink); }
+.smart-stage { background:var(--altfel-paper);color:var(--altfel-ink); }
+.smart-background { background:radial-gradient(ellipse at 95% 4%,#d5655140,transparent 45%),
+                                radial-gradient(ellipse at 4% 100%,#80afa53d,transparent 48%),var(--altfel-paper); }
+.smart-media-panel { background:#8bb7ac; }
+.smart-copy { background:radial-gradient(ellipse at 94% 15%,#eac74835,transparent 50%); }
+.smart-eyebrow { color:var(--altfel-coral-deep);font-weight:850; }
+.smart-headline { color:var(--altfel-ink);font-weight:850; }
+.smart-subtitle { color:#9f4b3f; }
+.smart-slide-body { color:#45433e; }
+.smart-handle { color:#975047; }
+.smart-brand,.smart-art,.smart-menu-brand { display:inline-block;align-self:flex-start;
+  padding:.15em .38em .22em;background:var(--altfel-white);color:var(--altfel-ink);
+  border-radius:4px 4px 17px 3px;font-family:'Arial Black',Manrope,sans-serif;
+  font-weight:900;letter-spacing:-.075em;transform:rotate(-6deg);
+  box-shadow:5px 5px 0 #2525261c; }
+.smart-art { align-self:auto; }
+.smart-qr { color:var(--altfel-ink);border:2px solid var(--altfel-ink);box-shadow:6px 6px 0 #d5655144; }
+.smart-live-board { border-top:2px solid #2928274b; }
+.smart-live-board>strong { color:var(--altfel-coral-deep); }
+.smart-live-row,.smart-live-row small { color:var(--altfel-ink); }
+.smart-live-progress { background:#d9d3c8; }
+.smart-live-progress i { background:var(--altfel-coral); }
+.smart-menu-stage { background:radial-gradient(ellipse at 100% 0,#80afa555,transparent 38%),var(--altfel-paper);
+  color:var(--altfel-ink); }
+.smart-menu-brand { color:var(--altfel-ink);font-size:clamp(22px,2.5vw,49px); }
+.smart-menu-header small { color:var(--altfel-coral-deep);letter-spacing:.09em; }
+.smart-menu-header h1 { color:var(--altfel-ink);font-weight:850; }
+.smart-menu-card { background:var(--altfel-white);border:1px solid #e3d5c0;
+  box-shadow:0 5px 16px #2a292416; }
+.smart-menu-cover { background:#bcd5cb; }
+.smart-menu-placeholder { color:var(--altfel-ink); }
+.smart-menu-card strong { color:var(--altfel-ink);font-weight:850; }
+.smart-menu-card span { color:var(--altfel-coral-deep); }
+.smart-menu-card p { color:#514a41; }
+.smart-menu-footer { color:#6e6358;font-weight:750; }
+.quiz-tv { background:var(--altfel-paper);color:var(--altfel-ink); }
+.quiz-tv header { border-color:#d3bc9f; }
+.quiz-tv header>span { color:var(--altfel-coral-deep); }
+.quiz-tv-kicker { color:var(--altfel-coral-deep); }
+.quiz-tv-options>div { background:var(--altfel-white);border-color:#e0ceba;color:var(--altfel-ink); }
+.quiz-tv-options b { color:var(--altfel-coral-deep); }
+.quiz-tv-options .correct { background:#dcebd8;border-color:#618e75; }
+.quiz-tv-ranking>div { border-color:#d8c9b8; }
