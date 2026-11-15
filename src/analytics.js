@@ -49,7 +49,7 @@ export function createGuestAnalytics({supabase,slug='',eventId=null,root,initial
    banner.setAttribute('aria-label','Preferințe statistici');
    banner.innerHTML='<strong>Statistici #altfel</strong>'+
      '<p>Cu acordul tău măsurăm deschideri de meniu, interacțiuni și instalarea aplicației. '+
-     'Folosim doar un identificator temporar pentru această filă, fără nume, email, telefon sau ce ai căutat. '+
+     'Pentru statistici folosim un identificator temporar al filei, fără nume, email, telefon sau căutările efectuate. '+
      'Poți refuza fără să pierzi nicio funcție.</p>'+
      '<div><button type="button" data-analytics-choice="no">Refuz</button>'+
      '<button type="button" data-analytics-choice="yes">Accept statisticile</button></div>';
