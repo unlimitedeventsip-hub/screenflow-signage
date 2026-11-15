@@ -16,7 +16,7 @@ export async function renderInteractivePage({root,supabaseUrl,eventId}){
  document.title='Screenflow · Participă';
  document.body.classList.add('interactive-body');
  const endpointUrl=endpoint(supabaseUrl);
- root.innerHTML='<main class="join-page"><div class="join-shell"><div class="join-brand">screenflow<span>.</span></div><p class="join-info">Se deschide evenimentul...</p></div></main>';
+ root.innerHTML='<main class="join-page"><div class="join-shell"><div class="join-brand">#altfel</div><p class="join-info">Se deschide evenimentul...</p></div></main>';
  let state=null,submitted=false,quizName='',draftChoice=null;
  const joinedKey='screenflow:quiz:joined:'+eventId;
  const answerKey=()=> 'screenflow:quiz:answer:'+eventId+':'+state.question_index;
@@ -30,7 +30,7 @@ export async function renderInteractivePage({root,supabaseUrl,eventId}){
   const isKaraoke=state.kind==='karaoke';
   const options=Array.isArray(state.options)?state.options:[];
   const queue=Array.isArray(state.karaoke)?state.karaoke:[];
-  content().innerHTML='<div class="join-brand">screenflow<span>.</span></div>'+
+  content().innerHTML='<div class="join-brand">#altfel</div>'+
    '<p class="join-eyebrow">'+(isKaraoke?'KARAOKE · ÎNSCRIERE':'VOT LIVE')+'</p>'+
    '<h1>'+safe(state.title)+'</h1>'+
    '<p class="join-description">'+(isKaraoke?'Alege o melodie și intră în lista de karaoke.':'Alege o singură variantă. Rezultatele apar pe TV.')+'</p>'+
