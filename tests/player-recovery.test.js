@@ -29,4 +29,6 @@ test('actual playback failures remain visible in TV diagnostics', () => {
   assert.match(playerDiagnosticError('','Offline incomplet: 2/4'),/Offline incomplet/);
   assert.match(playerDiagnosticError('','Offline indisponibil: fișier lipsă'),/Offline indisponibil/);
   assert.equal(playerDiagnosticError('Video: pornire în 3.5 secunde','Offline pregătit: 3/3'),'');
+  assert.equal(playerDiagnosticError('Video: buffering','Pregătire offline…'),'');
+  assert.equal(playerDiagnosticError('Video: stalled',''),'');
 });
