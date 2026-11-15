@@ -48,7 +48,7 @@ export function startConnect(supabase,root){
  document.body.classList.add('tv-body');
  document.title='Screenflow · Asociere TV';
  root.innerHTML=`<div class="tv-connect">
- <div class="connect-brand">screenflow<span>.</span></div>
+ <div class="connect-brand">screenflow<span>.</span><span class="altfel-sticker connect-sticker" aria-hidden="true">#altfel</span></div>
  <div class="connect-label">DISPOZITIV NOU</div>
  <h1>Conectează televizorul</h1>
  <p>Televizorul este detectat automat. În panoul Screenflow, deschide secțiunea Televizoare, confirmă codul și alege playlistul.</p>
