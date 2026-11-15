@@ -44,6 +44,7 @@ public final class MainActivity extends Activity {
     private long lastPausedAtMs = 0L;
     private Handler handler = new Handler(Looper.getMainLooper());
     private Runnable retry;
+    private Runnable initialPageProbe;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -135,10 +136,12 @@ public final class MainActivity extends Activity {
                 return req.isForMainFrame() && verify(req.getUrl().toString())==null;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                cancelPageProbe();
                 failed=false;
                 if (offline!=null) offline.setVisibility(View.GONE);
             }
             @Override public void onPageFinished(WebView view, String url) {
+                schedulePageProbe(url);
                 String allowed = verify(url);
                 if (allowed != null && allowed.contains("/play/")) {
                     // Each physical TV keeps its own local pairing/URL.
@@ -153,6 +156,7 @@ public final class MainActivity extends Activity {
                     error("Serverul a răspuns cu eroarea " + res.getStatusCode());
             }
             @Override public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                cancelPageProbe();
                 frame.removeView(web);
                 web.destroy();
                 web=null;
@@ -192,6 +196,29 @@ public final class MainActivity extends Activity {
         button.setOnClickListener(v -> open());
         offline.addView(button);
         offline.setVisibility(View.GONE);
+    }
+
+    // WebView may finish loading the HTML while an unsupported JS bundle leaves
+    // only the background visible. Detect that case and show a recoverable error.
+    private void cancelPageProbe() {
+        if(initialPageProbe!=null) handler.removeCallbacks(initialPageProbe);
+        initialPageProbe=null;
+    }
+
+    private void schedulePageProbe(String url) {
+        cancelPageProbe();
+        if(verify(url)==null) return;
+        initialPageProbe=()->{
+            if(web==null || failed || isFinishing()) return;
+            web.evaluateJavascript("(function(){var p=location.pathname;" +
+                "if(p.indexOf('/play/')===0)return !!document.querySelector('.tv-stage');" +
+                "if(p==='/connect')return !!document.querySelector('.tv-connect');" +
+                "return true;})()", result -> {
+                if("false".equals(result) && !failed)
+                    error("Interfața TV nu s-a încărcat. Verifică versiunea aplicației.");
+            });
+        };
+        handler.postDelayed(initialPageProbe,18000);
     }
 
     private void open() {
@@ -247,6 +274,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         if(retry!=null) handler.removeCallbacks(retry);
+        cancelPageProbe();
         if(web!=null) {frame.removeView(web); web.destroy(); web=null;}
         super.onDestroy();
     }

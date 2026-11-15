@@ -29,12 +29,18 @@ export function deviceInfo(){
 }
 export async function tvPing(supabase,extras={},create=false){
  const key=installation(create);if(!key)return null;
- const {data,error}=await supabase.rpc('tv_register',{
-  p_installation_id:key.id,p_secret:key.secret,...deviceInfo(),
-  p_current_asset_id:extras.asset||null,
-  p_playback_state:extras.state||'waiting',
-  p_error_message:extras.error||''
- });
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),8000);
+ let response;
+ try{
+  response=await supabase.rpc('tv_register',{
+   p_installation_id:key.id,p_secret:key.secret,...deviceInfo(),
+   p_current_asset_id:extras.asset||null,
+   p_playback_state:extras.state||'waiting',
+   p_error_message:extras.error||''
+  }).abortSignal(controller.signal);
+ }finally{clearTimeout(timer);}
+ const {data,error}=response;
  if(error)throw error;
  return data;
 }

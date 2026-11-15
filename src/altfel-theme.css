@@ -1,0 +1,75 @@
+/* #altfel visual system for Screenflow.
+   Brand references: black/white mark, understated warmth, high contrast.
+   Applies to the control interface and standby/pairing screens, NEVER to ads. */
+:root {
+  --ink:#292924;
+  --muted:#79786f;
+  --line:#e5e0d5;
+  --gold:#b49a70;
+  --dark:#191a18;
+  background:#f6f3ec;
+  color:#292924;
+}
+.dashboard { background:#f6f3ec; }
+.sidebar { background:#191b19; color:#d7d5cd; }
+.sidebar-label,.nav-group-title { color:#a6a396; }
+.brand-symbol { background:#ffffff0a; color:#f1e5cd; border-color:#d9c8a633; }
+.brand strong span,.tv-logo span { color:#d6bb8d; }
+.brand small { color:#b7b09e; letter-spacing:1.6px; }
+.nav-item { color:#b3b6ac; }
+.nav-item.active { color:#f7e9cf; background:#ffffff10; box-shadow:inset 3px 0 #d6bb8d; }
+.nav-item:hover { background:#ffffff0b; }
+.avatar { background:#bca67f; color:#25231f; }
+.topbar { background:#fffefa; border-color:#e7e1d8; }
+.crumb strong { color:#2d2d27; }
+.content { max-width:1530px; }
+.page-head h1 { color:#292924; letter-spacing:-1.35px; }
+.page-head p { color:#7b7972; }
+.kicker { color:#9b8057; letter-spacing:1.8px; }
+.panel,.asset-card,.screen-card,.stat { background:#fffefb; border-color:#e8e2d8; box-shadow:0 5px 20px #211d1608; }
+.stat-icon,.screen-symbol { background:#f4efe4; color:#85724f; }
+.stat>strong,.screen-card h3 { color:#302e28; }
+.stat>span { color:#827e72; }
+.btn.primary { background:#262824; color:#fffefa; box-shadow:0 5px 12px #27262016; }
+.btn.primary:hover { background:#44443b; }
+.btn.subtle { background:#fffefa; border-color:#e3ded2; color:#58564d; }
+.btn:focus-visible,.nav-item:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
+  outline-color:#b49a70; outline-offset:3px;
+}
+.premium-hero {
+  background:linear-gradient(110deg,#222621,#414339);
+  color:#f9f5ec;
+  border:1px solid #b6a27b40;
+}
+.premium-hero:after { border-color:#f5eedb0d; box-shadow:0 0 0 40px #f5eedb04,0 0 0 80px #f5eedb03; }
+.premium-hero h2 { color:#fffaf0; }
+.premium-hero p { color:#d1d0c3; }
+.premium-hero .kicker { color:#d7bf91; }
+.premium-hero .btn.primary { background:#e8dbbf; color:#262824; }
+.premium-hero .btn.subtle { border-color:#ffffff46; color:#f7f3e9; }
+.login-illustration { background:#22241f; }
+.toast { background:#33352e; }
+.tv-connect {
+  background:radial-gradient(ellipse at 50% 28%,#303229 0%,#1b1e1b 55%,#111310 100%);
+  color:#fffaf0;
+}
+.connect-brand span { color:#d5b884; }
+.connect-label { color:#d9c7a6; border-color:#8a837051; }
+.tv-connect p { color:#cccac1; }
+.connect-code { background:#ffffff09; border:1px solid #d6ba8b60; color:#f6e7c9; }
+.connect-status { color:#e1c694; }
+.tv-connect small { color:#aba99f; }
+.tv-body,.tv-stage,.tv-media { background:#111310; }
+.tv-standby { background:radial-gradient(ellipse at 50% 42%,#31332b 0%,#1e211d 54%,#111310 100%); }
+.tv-standby p { color:#d1cdc2; }
+.tv-line { background:#b49a70; }
+.player-empty { background:#111310; }
+.player-empty p { color:#c4c0b5; }
+.tv-indicator { color:#f6edddbb; }
+@media (max-width:650px) {
+  .nav-item.active { box-shadow:inset 0 -2px #d6bb8d; }
+  .page-head h1 { letter-spacing:-.8px; }
+  .tv-connect { padding:24px 14px; }
+  .tv-connect p { font-size:clamp(15px,3vw,20px); }
+  .connect-code { max-width:100%; font-size:clamp(32px,9vw,64px); letter-spacing:5px; }
+}
