@@ -197,22 +197,31 @@ async function startAdmin() {
     try{await refreshDevices();if(!document.activeElement?.matches('input,textarea,select') && ['overview','screens'].includes(state.view))render();}catch{}
   },15000);
 
+  let analyticsRequestId=0;
+  let analyticsMaintenanceDone=false;
   async function loadAnalytics(){
+    const requestId=++analyticsRequestId;
     if(!state.isAdmin)return;
     state.analyticsLoading=true;state.analyticsError='';state.analytics=null;
     if(state.view==='analytics')render();
     try{
+      if(!analyticsMaintenanceDone){
+        analyticsMaintenanceDone=true;
+        // Delete metrics older than 90 days when an authorized admin opens reports.
+        await supabase.rpc('purge_screenflow_analytics');
+      }
       const [report,requests]=await Promise.all([
         supabase.rpc('get_screenflow_analytics_report',{
           p_days:state.analyticsDays,p_location_id:state.analyticsLocation||null
         }),
         supabase.rpc('list_screenflow_access_requests')
       ]);
+      if(requestId!==analyticsRequestId)return;
       if(report.error)throw report.error;
       if(requests.error)throw requests.error;
       state.analytics=report.data||null;state.accessRequests=requests.data||[];
-    }catch(e){state.analyticsError=e.message||'Raportul nu este disponibil.';}
-    finally{state.analyticsLoading=false;if(state.view==='analytics')render();}
+    }catch(e){if(requestId===analyticsRequestId)state.analyticsError=e.message||'Raportul nu este disponibil.';}
+    finally{if(requestId===analyticsRequestId){state.analyticsLoading=false;if(state.view==='analytics')render();}}
   }
   function frame(content) {
     const title = NAV.find(n=>n[0]===state.view)?.[2] || 'Panou general';
