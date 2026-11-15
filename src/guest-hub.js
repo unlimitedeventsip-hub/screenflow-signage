@@ -2,10 +2,11 @@ import QRCode from 'qrcode';
 import {escapeHTML as safe,httpsLink} from './experience-utils.js';
 import './guest-hub.css';
 import {installCard,venueManifest,enableVenuePush} from './pwa.js';
+import {createGuestAnalytics} from './analytics.js';
 const endpoint=base=>base+'/functions/v1/screenflow-guest-v2';
 const link=(url,label,extra='')=>httpsLink(url)?`<a class="guest-link ${extra}" href="${safe(httpsLink(url))}" target="_blank" rel="noopener noreferrer">${label}<span><svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></a>`:'';
 
-export async function renderGuestHub({root,supabaseUrl,slug,fetcher=fetch}){
+export async function renderGuestHub({root,supabase,supabaseUrl,slug,fetcher=fetch}){
  document.body.classList.add('guest-body');
  root.innerHTML='<main class="guest-shell"><p class="guest-eyebrow">BINE AI VENIT</p><h1>#altfel<span>.</span></h1><p>Pregătim seara ta…</p></main>';
  let data;
@@ -24,13 +25,44 @@ export async function renderGuestHub({root,supabaseUrl,slug,fetcher=fetch}){
  ${link(hub.tickets_url,'<b>03</b><div><strong>Bilete la party</strong><small>Următoarea seară de ținut minte.</small></div>')}
  ${events.length?'<a class="guest-link" href="#participa"><b>LIVE</b><div><strong>Votează & participă</strong><small>Tu faci parte din seară.</small></div><span><svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></a>':''}</div>
  ${events.length?`<section class="guest-section" id="participa"><p class="guest-eyebrow">SE ÎNTÂMPLĂ ACUM</p><h2>Intră în joc.</h2>${events.map(ev=>`<a class="guest-link" href="/join/${safe(ev.id)}"><div><strong>${safe(ev.title)}</strong><small>${ev.kind==='karaoke'?'Înscriere la karaoke':'Vot live de pe telefon'}</small></div><span><svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></a>`).join('')}</section>`:''}
- ${onlineMenu||httpsLink(hub.menu_url)?`<section class="guest-section" id="meniu"><p class="guest-eyebrow">CE ÎȚI FACE POFTĂ?</p><h2>Meniul nostru.</h2><input class="guest-menu-search" data-menu-search placeholder="Caută în meniu…" aria-label="Caută în meniu"><div class="guest-menu-categories">${[...new Set(menu.map(x=>x.category).filter(Boolean))].map(c=>`<button type="button" data-menu-category="${safe(c)}">${safe(c)}</button>`).join('')}<button type="button" data-menu-category="">Toate</button></div><div class="guest-menu">${menu.map(item=>`<article data-menu-item data-category="${safe(item.category)}">${item.image?`<img src="${safe(supabaseUrl+'/storage/v1/object/public/ads/'+item.image)}" alt="" loading="lazy">`:''}<div><h3>${safe(item.title)}</h3><strong>${safe(item.subtitle)}</strong>${item.body?`<p>${safe(item.body)}</p>`:''}</div></article>`).join('')}</div>${httpsLink(hub.menu_url)?`<div class="guest-embedded-menu"><iframe title="Meniul locației" src="${safe(httpsLink(hub.menu_url))}" loading="lazy" sandbox="allow-scripts allow-popups" referrerpolicy="no-referrer"></iframe>${link(hub.menu_url,'Deschide meniul complet')}</div>`:''}</section>`:''}
+ ${onlineMenu||httpsLink(hub.menu_url)?`<section class="guest-section" id="meniu"><p class="guest-eyebrow">CE ÎȚI FACE POFTĂ?</p><h2>Meniul nostru.</h2><input class="guest-menu-search" data-menu-search placeholder="Caută în meniu…" aria-label="Caută în meniu"><div class="guest-menu-categories">${[...new Set(menu.map(x=>x.category).filter(Boolean))].map(c=>`<button type="button" data-menu-category="${safe(c)}">${safe(c)}</button>`).join('')}<button type="button" data-menu-category="">Toate</button></div><div class="guest-menu">${menu.map(item=>`<article data-menu-item data-menu-id="${safe(item.id)}" data-category="${safe(item.category)}">${item.image?`<img src="${safe(supabaseUrl+'/storage/v1/object/public/ads/'+item.image)}" alt="" loading="lazy">`:''}<div><h3>${safe(item.title)}</h3><strong>${safe(item.subtitle)}</strong>${item.body?`<p>${safe(item.body)}</p>`:''}</div></article>`).join('')}</div>${httpsLink(hub.menu_url)?`<div class="guest-embedded-menu"><iframe title="Meniul locației" src="${safe(httpsLink(hub.menu_url))}" loading="lazy" sandbox="allow-scripts allow-popups" referrerpolicy="no-referrer"></iframe>${link(hub.menu_url,'Deschide meniul complet')}</div>`:''}</section>`:''}
  ${locations.some(l=>l.booking_enabled)?`<section class="guest-section" id="rezervari"><p class="guest-eyebrow">PĂSTRĂM LEGĂTURA</p><h2>O masă pentru voi.</h2><p class="guest-muted">Alege locația și trimite cererea. Rezervarea devine valabilă după aprobarea echipei.</p><form id="guest-booking" class="guest-form"><label>Locația<select name="venue" required>${locations.filter(x=>x.booking_enabled).map(l=>`<option value="${safe(l.slug)}" ${l.slug===slug?'selected':''}>${safe(l.title)}</option>`).join('')}</select></label><label>Numele tău<input name="name" required minlength="2" maxlength="70" autocomplete="name" placeholder="Cum te numești?"></label><label>Email<input name="email" required type="email" maxlength="254" autocomplete="email" placeholder="nume@email.ro"></label><label>Telefon<input name="phone" required type="tel" maxlength="25" autocomplete="tel" placeholder="07…"></label><div class="guest-form-row"><label>Data și ora · București<input name="date" type="datetime-local" required></label><label>Persoane<input name="guests" type="number" min="1" max="30" value="2" required></label></div><label>Ce ar mai trebui să știm?<textarea name="note" maxlength="350" rows="2" placeholder="Opțional: aniversare, preferințe…"></textarea></label><div class="guest-honeypot" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div><label class="guest-consent"><input type="checkbox" name="consent" required><span>Sunt de acord ca locația să folosească numele, emailul și telefonul pentru a gestiona această cerere.</span></label><p class="guest-form-message" role="status" aria-live="polite"></p><button class="guest-button" type="submit">Trimite cererea <span><svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></button></form></section>`:''}
  <section class="guest-section guest-social"><p class="guest-eyebrow">NE GĂSEȘTI ȘI AICI</p><h2>Rămânem aproape.</h2><div>${link(hub.instagram_url,'Instagram')}${link(hub.tiktok_url,'TikTok')}${link(hub.facebook_url,'Facebook')}${link(hub.maps_url,'Cum ajungi la noi')}</div>${![hub.instagram_url,hub.tiktok_url,hub.facebook_url,hub.maps_url].some(httpsLink)?'<p class="guest-muted">Linkurile locației vor apărea aici.</p>':''}</section>${installCard()}<footer class="guest-footer">#altfel · Mai mult decât o ieșire.<small>Experiență oferită prin Screenflow</small></footer></main>`;
 
+ const metrics=createGuestAnalytics({supabase,slug,root});
+ metrics.init();
+ const openEvents={
+   '#meniu':'menu_open','#rezervari':'booking_open','#participa':'event_open'
+ };
+ root.addEventListener('click',event=>{
+   const anchor=event.target.closest('a');
+   if(!anchor)return;
+   const href=anchor.getAttribute('href')||'';
+   if(openEvents[href])metrics.track(openEvents[href]);
+   else if(anchor.closest('.guest-social'))metrics.track('social_click');
+   else if(anchor.closest('.guest-actions')&&anchor.target==='_blank'){
+     metrics.track(href===hub.tickets_url?'tickets_click':'external_booking_click');
+   }else if(anchor.closest('#participa'))metrics.track('event_open');
+ });
+ if('IntersectionObserver' in window){
+   const visible=new Set();
+   const observer=new IntersectionObserver(entries=>{
+     for(const entry of entries)if(entry.isIntersecting){
+       const item=entry.target;
+       if(item.id==='meniu')metrics.track('menu_open');
+       else if(item.hasAttribute('data-menu-id')&&!visible.has(item.dataset.menuId)){
+         visible.add(item.dataset.menuId);
+         metrics.track('menu_item_view',{itemId:item.dataset.menuId});
+       }
+     }
+   },{threshold:.55});
+   const section=root.querySelector('#meniu');if(section)observer.observe(section);
+   root.querySelectorAll('[data-menu-id]').forEach(el=>observer.observe(el));
+ }
  let category='';const search=root.querySelector('[data-menu-search]');
  const filterMenu=()=>{for(const row of root.querySelectorAll('[data-menu-item]'))row.hidden=Boolean(category&&row.dataset.category!==category)||!row.textContent.toLocaleLowerCase('ro').includes((search?.value||'').toLocaleLowerCase('ro'));};
- search?.addEventListener('input',filterMenu);root.querySelectorAll('[data-menu-category]').forEach(b=>b.addEventListener('click',()=>{category=b.dataset.menuCategory;root.querySelectorAll('[data-menu-category]').forEach(x=>x.classList.toggle('active',x===b));filterMenu();}));
+ let searchTracked=false;
+ search?.addEventListener('input',()=>{filterMenu();if(!searchTracked&&search.value.trim().length>=2){searchTracked=true;metrics.track('menu_search');}});root.querySelectorAll('[data-menu-category]').forEach(b=>b.addEventListener('click',()=>{category=b.dataset.menuCategory;root.querySelectorAll('[data-menu-category]').forEach(x=>x.classList.toggle('active',x===b));filterMenu();}));
  let statusPushKey='',statusSignature='';const trackingKey='screenflow:guest:reservation:'+slug;const token=new URLSearchParams(location.search).get('reservation')||localStorage.getItem(trackingKey);if(token)localStorage.setItem(trackingKey,token);venueManifest('guest',slug,token||'');
  if(token){const refreshStatus=async()=>{try{const res=await fetcher(endpoint(supabaseUrl)+'?slug='+encodeURIComponent(slug)+'&reservation='+encodeURIComponent(token));const result=await res.json();if(!res.ok)throw Error(result.error);const r=result.reservation;statusPushKey=result.push_key;const signature=JSON.stringify(r);if(signature===statusSignature&&root.querySelector('[data-reservation-status] section'))return;statusSignature=signature;root.querySelector('[data-reservation-status]').innerHTML=`<section class="guest-success"><span>REZERVARE · ${safe(r.reference)}</span><h2>${({pending:'Cererea așteaptă confirmarea',confirmed:'Rezervarea este confirmată ✓',cancelled:'Rezervarea a fost anulată'})[r.status]}</h2><p>${new Date(r.requested_at).toLocaleString('ro-RO',{timeZone:'Europe/Bucharest'})} · ${r.guests} persoane</p><p>${safe(r.response_note)}</p><small>Păstrează acest link privat pentru a urmări starea.</small>${r.status==='pending'?'<p><button type="button" class="guest-button" data-guest-notify>Notifică-mă când se confirmă</button></p><p data-guest-notify-message role="status"></p>':''}</section>`;}catch(e){root.querySelector('[data-reservation-status]').textContent=e.message;}};await refreshStatus();setInterval(()=>{if(!document.hidden)refreshStatus();},15000);}
  root.addEventListener('click',async e=>{const button=e.target.closest('[data-guest-notify]');if(!button)return;const message=root.querySelector('[data-guest-notify-message]');button.disabled=true;try{await enableVenuePush(async(_action,payload)=>{const res=await fetcher(endpoint(supabaseUrl)+'?slug='+encodeURIComponent(slug),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'subscribe-status',token,subscription:payload.subscription})});const result=await res.json();if(!res.ok)throw Error(result.error);return result;},statusPushKey);message.textContent='Notificările pentru această rezervare sunt active.';button.textContent='Notificări active ✓';}catch(err){message.textContent=err.message;button.disabled=false;}});
@@ -44,6 +76,7 @@ export async function renderGuestHub({root,supabaseUrl,slug,fetcher=fetch}){
    const res=await fetcher(endpoint(supabaseUrl)+'?slug='+encodeURIComponent(values.venue||slug),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...values,guests:Number(values.guests),consent:values.consent==='on',request_id:requestId})});
    const result=await res.json();if(!res.ok)throw Error(result.error||'Cererea nu a putut fi trimisă.');
    const statusUrl='/g/'+encodeURIComponent(values.venue||slug)+'?reservation='+encodeURIComponent(result.token);
+   metrics.track('booking_sent');
    form.innerHTML=`<div class="guest-success"><span>✓ CERERE TRIMISĂ · ${safe(result.reference)}</span><h3>Vorbim în curând.</h3><p>${safe(result.message)}</p><a class="guest-button" href="${safe(statusUrl)}">Urmărește confirmarea</a><p>Salvează acest link privat. Emailul este trimis după aprobare când serviciul este activ.</p></div>`;
   }catch(err){message.textContent=err.message;button.disabled=false;}
  });
@@ -66,9 +99,9 @@ export function renderGuestAdmin({state,heading}){
 export function hydrateGuestQR(root,state){
  const loc=state.locations.find(x=>x.id===state.guestLocation)||state.locations[0];
  const hub=state.guestHubs.find(x=>x.location_id===loc?.id),img=root.querySelector('[data-hub-qr]');
- if(hub&&img)QRCode.toDataURL(location.origin+'/g/'+hub.slug,{width:420,margin:3,errorCorrectionLevel:'M',color:{dark:'#172b28',light:'#ffffff'}}).then(src=>{if(img.isConnected)img.src=src;});
+ if(hub&&img)QRCode.toDataURL(location.origin+'/g/'+hub.slug+'?src=printqr',{width:420,margin:3,errorCorrectionLevel:'M',color:{dark:'#172b28',light:'#ffffff'}}).then(src=>{if(img.isConnected)img.src=src;});
 }
 export async function downloadGuestQR(hub){
- const text=await QRCode.toString(location.origin+'/g/'+hub.slug,{type:'svg',margin:4,errorCorrectionLevel:'M'});
+ const text=await QRCode.toString(location.origin+'/g/'+hub.slug+'?src=printqr',{type:'svg',margin:4,errorCorrectionLevel:'M'});
  const url=URL.createObjectURL(new Blob([text],{type:'image/svg+xml'}));const anchor=document.createElement('a');anchor.href=url;anchor.download=hub.slug+'-qr.svg';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
