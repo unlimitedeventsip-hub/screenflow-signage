@@ -40,10 +40,13 @@ export function renderAnalyticsAdmin({state,heading}){
  if(state.analyticsLoading && !data)return top+tools+'<section class="panel analytics-loading">Se încarcă datele…</section>';
  if(state.analyticsError)return top+tools+'<section class="panel"><p class="alert">'+safe(state.analyticsError)+'</p></section>';
  if(!data)return top+tools+'<section class="panel"><p>Apasă Actualizează pentru a încărca statisticile.</p></section>';
- const events=data.web_events||[],transitions=data.tv_transitions||[],installations=data.tv_installations||[],
+ const events=data.web_events||[],transitions=data.tv_transitions||[],tvMedia=data.tv_media||[],installations=data.tv_installations||[],
   bookings=data.bookings||[],participation=data.participation||[],items=data.popular_items||[];
  const views=eventTotal(events,'hub_view'),menu=eventTotal(events,'menu_open');
  const qr=events.filter(e=>e.event_name==='hub_view'&&['print_qr','tv_qr'].includes(e.source));
+ const tvStarted=sum(tvMedia.filter(e=>e.event_name==='started'));
+ const tvFinished=sum(tvMedia.filter(e=>e.event_name==='completed'));
+ const tvMinutes=Math.round(sum(tvMedia.filter(e=>e.event_name==='completed'),'seconds')/60);
  const confirmed=sum(bookings.filter(e=>e.status==='confirmed'));
  const pending=sum(bookings.filter(e=>e.status==='pending'));
  const tvRegistered=sum(installations,'installations');
@@ -54,9 +57,13 @@ export function renderAnalyticsAdmin({state,heading}){
   card('Deschideri meniu',menu,'Secțiunea de meniu afișată / accesată')+
   card('Instalări PWA semnalate',eventTotal(events,'pwa_install'),'Browsere compatibile; nu toate instalările iOS')+
   card('Rezervări confirmate',confirmed,'Din baza de rezervări; rezultat verificat')+
-  card('Difuzări detectate',sum(transitions),'Schimbări de material raportate de TV')+
+  card('Porniri media TV',tvStarted,'Evenimente de pornire raportate de player')+
+  card('Materiale finalizate',tvFinished,'Finalizări raportate de player')+
+  card('Minute TV raportate',tvMinutes,'Aproximare din timpul activ al playerului')+
+  card('Tranziții istorice TV',sum(transitions),'Schimbări detectate; nu este audiență')+
   card('Player-e înregistrate',tvRegistered,'Include browsere, APK și TV; nu doar instalări')+
   card('Autentificări personal',data.staff_logins||0,'Numărate de la activarea modulului')+
+  card('Cereri de cont',data.account_requests_new||0,'Solicitări create în intervalul selectat')+
  '</section>';
  const sourceRows=[['QR televizoare',eventTotal(events,'hub_view','tv_qr')],
    ['QR printat',eventTotal(events,'hub_view','print_qr')],
@@ -72,6 +79,7 @@ export function renderAnalyticsAdmin({state,heading}){
   ['Lansări din PWA instalată',eventTotal(events,'pwa_standalone')]];
  const rank=arr=>arr.map(([label,value])=>'<div class="analytics-rank"><span>'+safe(label)+'</span><strong>'+int(value)+'</strong></div>').join('');
  const tvRank=transitions.slice(0,8).map(x=>[x.title,x.count]);
+ const tvStartedRank=tvMedia.filter(x=>x.event_name==='started').slice(0,8).map(x=>[x.title,x.count]);
  const itemRank=items.slice(0,8).map(x=>[x.title,x.opens]);
  const participationRows=participation.map(x=>[x.activity,x.count]);
  const installRows=installations.map(x=>[x.platform+' · '+x.client_type,x.installations]);
@@ -85,7 +93,9 @@ export function renderAnalyticsAdmin({state,heading}){
  rank([['Cereri în așteptare',pending],['Rezervări confirmate',confirmed],
   ['Rezervări anulate',sum(bookings.filter(e=>e.status==='cancelled'))],...participationRows])+
  '<p class="hub-note">Voturile, răspunsurile la quiz și înscrierile la karaoke sunt preluate din înregistrările confirmate în baza de date.</p></section></div>'+
- '<div class="analytics-columns"><section class="panel"><h2>Materiale difuzate · TV</h2>'+
+ '<div class="analytics-columns"><section class="panel"><h2>Porniri de materiale raportate · TV</h2>'+ 
+ (tvStartedRank.length?rank(tvStartedRank):'<p class="hub-note">Noile evenimente vor apărea după ce player-ele TV încep să trimită date.</p>')+
+ '<h3 class="analytics-subhead">Tranziții TV din istoricul existent</h3>'+ 
  (tvRank.length?rank(tvRank):'<p class="hub-note">Încă nu există tranziții TV în acest interval.</p>')+
  '<p class="hub-note">O tranziție detectată nu garantează că cineva a privit ecranul și nu reprezintă durata reală de vizionare.</p></section>'+
  '<section class="panel"><h2>Produse din meniu & aplicații</h2>'+
@@ -94,6 +104,7 @@ export function renderAnalyticsAdmin({state,heading}){
  '<p class="hub-note">Instanțe noi în interval: '+int(sum(installations,'new_installations'))+'. Aceste înregistrări nu dovedesc instalarea aplicației.</p></section></div>'+
  '<section class="panel analytics-accounts"><div class="panel-head"><h2>Cereri noi de cont</h2><span>'+int(data.pending_accounts)+' în așteptare</span></div>'+
  '<p class="hub-note"><strong>Atenție:</strong> aprobarea acordă acces complet de administrator la toate locațiile și la informațiile private. Aprobă doar persoane de încredere.</p>'+
+ (data.latest_staff_logins?.length?'<h3 class="analytics-subhead">Ultimele autentificări reușite</h3>'+data.latest_staff_logins.slice(0,10).map(e=>'<div class="analytics-rank"><span>'+safe(e.email||'Administrator')+'</span><strong>'+safe(new Date(e.occurred_at).toLocaleString('ro-RO'))+'</strong></div>').join(''):'')+
  (accountList.length?accountList.map(u=>'<div class="analytics-access-row"><div><strong>'+safe(u.email||'Cont nou')+'</strong><small>Solicitat: '+safe(new Date(u.requested_at).toLocaleString('ro-RO'))+'</small></div>'+
  '<button type="button" class="btn primary small" data-action="analytics-approve-access" data-id="'+safe(u.user_id)+'">Aprobă administrator</button></div>').join(''):
  '<p class="hub-note">Nu există solicitări de acces în așteptare.</p>')+'</section>'+
