@@ -23,7 +23,7 @@ import {renderReservationManager} from './reservation-manager.js';
 import {setupPWA} from './pwa.js';
 import {aiPrompt,parseAIImport} from './ai-import.js';
 import {createPosterTransitions} from './poster-transitions.js';
-import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs} from './player-recovery.js';
+import {VIDEO_BUFFER_TIMEOUT_MS,mediaRetryDelayMs,playerDiagnosticError,isLegacyProgressMessage} from './player-recovery.js';
 import './poster-transitions.css';
 import './altfel-theme.css';
 setupPWA();
@@ -131,7 +131,7 @@ async function startAdmin() {
     const background=recent&&t.playback_state==='background';
     const status=active?'APLICAȚIE ONLINE':background?'APLICAȚIE ÎN FUNDAL':'FĂRĂ RĂSPUNS';
     const asset=state.assets.find(a=>a.id===t.current_asset_id);
-    return '<div class="tv-state"><span class="'+(active?'tv-dot on':'tv-dot')+'"></span><strong>'+status+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Ultimul material: '+safe(asset.title):'Ultima stare: '+safe(t.playback_state||'—'))+'</small>'+(t.error_message?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'<small>Ultimul contact: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small>'+(active?'':'<small>Nu putem distinge automat între TV oprit, standby, aplicație închisă sau lipsă internet.</small>')+'</div>';
+    return '<div class="tv-state"><span class="'+(active?'tv-dot on':'tv-dot')+'"></span><strong>'+status+'</strong><small>'+safe(t.platform)+' · '+safe(t.resolution)+' · '+safe(t.app_version)+'</small><small>'+(asset?'Ultimul material: '+safe(asset.title):'Ultima stare: '+safe(t.playback_state||'—'))+'</small>'+(t.error_message&&!isLegacyProgressMessage(t.error_message)?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'<small>Ultimul contact: '+safe(new Date(t.last_seen_at).toLocaleString('ro-RO'))+'</small>'+(active?'':'<small>Nu putem distinge automat între TV oprit, standby, aplicație închisă sau lipsă internet.</small>')+'</div>';
 }
   async function load() {
     const [locations,playlists,assets,items,screens] = await Promise.all([
@@ -215,7 +215,7 @@ async function startAdmin() {
     <div class="stat"><div class="stat-icon">${icon('image')}</div><span>Reclame active</span><strong>${active}</strong><small>Imagini și videoclipuri</small></div>
     <div class="stat"><div class="stat-icon">${icon('list')}</div><span>Playlisturi</span><strong>${state.playlists.length}</strong><small>Actualizare automată pe TV</small></div>
     <div class="stat"><div class="stat-icon">${icon('pin')}</div><span>Locații</span><strong>${state.locations.length}</strong><small>Dintr-un singur dashboard</small></div></div>
-    <section class="premium-hero"><div><div class="kicker">DE LA ECRAN LA EXPERIENȚĂ</div><h2>Toată locația. Un singur loc.</h2><p>Clienții scanează, descoperă meniul și rezervă. Tu alegi ce rulează pe fiecare televizor.</p></div><div class="premium-hero-actions"><button class="btn primary" data-nav="guests">Pagina clienților <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button class="btn subtle" data-nav="mirror">Partajează ecranul</button></div></section>${fleetSummary()}${pendingPanel()}<div class="two-col"><section class="panel"><div class="panel-head"><h2>Acces rapid</h2><span>CONTROL CENTER</span></div><div class="quick">${[['assets','cloud','Încarcă materiale','Poze și video în bibliotecă'],['playlists','list','Construiește un playlist','Alege ordinea și durata'],['screens','monitor','Conectează un televizor','Deschide linkul unic pe TV']].map(v=>`<button data-nav="${v[0]}" class="quick-item"><span class="quick-icon">${icon(v[1])}</span><span><strong>${v[2]}</strong><small>${v[3]}</small></span>${icon('arrow',17)}</button>`).join('')}</div></section>
+    <section class="premium-hero"><div><div class="kicker">DE LA ECRAN LA EXPERIENȚĂ</div><h2>Toată locația. Un singur loc.</h2><p>Clienții scanează, descoperă meniul și rezervă. Tu alegi ce rulează pe fiecare televizor.</p><span class="altfel-sticker hero-sticker" aria-hidden="true">#altfel</span></div><div class="premium-hero-actions"><button class="btn primary" data-nav="guests">Pagina clienților <svg class=ui-arrow width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.7 aria-hidden=true><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button class="btn subtle" data-nav="mirror">Partajează ecranul</button></div></section>${fleetSummary()}${pendingPanel()}<div class="two-col"><section class="panel"><div class="panel-head"><h2>Acces rapid</h2><span>CONTROL CENTER</span></div><div class="quick">${[['assets','cloud','Încarcă materiale','Poze și video în bibliotecă'],['playlists','list','Construiește un playlist','Alege ordinea și durata'],['screens','monitor','Conectează un televizor','Deschide linkul unic pe TV']].map(v=>`<button data-nav="${v[0]}" class="quick-item"><span class="quick-icon">${icon(v[1])}</span><span><strong>${v[2]}</strong><small>${v[3]}</small></span>${icon('arrow',17)}</button>`).join('')}</div></section>
     <section class="panel"><div class="panel-head"><h2>Ultimele materiale</h2><button data-nav="assets" class="text-link">Vezi toate ${icon('arrow',15)}</button></div>${state.assets.length?`<div class="recent">${state.assets.slice(0,4).map(a=>`<div class="recent-row"><span class="mini-preview">${a.kind==='image'?`<img src="${safe(pubUrl(a.storage_path))}" alt=""/>`:`${icon('play',18)}`}</span><div><strong>${safe(a.title)}</strong><small>${a.kind==='image'?'Imagine':'Video'} · ${fmt(a.created_at)}</small></div><span class="pill ${a.enabled?'green':'gray'}">${a.enabled?'Activ':'Oprit'}</span></div>`).join('')}</div>`:empty('image','Biblioteca este goală','Încarcă prima reclamă pentru a începe.')}</section></div>`;
   }
   function assetsView(){
@@ -300,26 +300,29 @@ async function startAdmin() {
       return '<div class="diagnostic-screen"><strong>'+safe(s.name)+'</strong>'+
         '<span class="pill '+(fresh&&!bg?'green':'gray')+'">'+status+'</span>'+
         '<small>'+(seconds===null?'Niciun heartbeat':'Ultimul heartbeat acum '+seconds+' secunde')+'</small>'+
-        (t?.error_message?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'</div>';
+        (t?.error_message&&!isLegacyProgressMessage(t.error_message)?'<small>Diagnostic: '+safe(t.error_message)+'</small>':'')+'</div>';
     }).join('');
-    const history=state.playbackEvents.map(item=>{
+    // Keep historical rows in the database, but hide cache-success messages
+    // previously tagged as errors by older TV clients.
+    const historyRows=state.playbackEvents.filter(item=>item.event_type!=='error'||!isLegacyProgressMessage(item.error_message));
+    const history=historyRows.map(item=>{
       const tv=state.screens.find(x=>x.id===item.screen_id);
       const asset=state.assets.find(x=>x.id===item.asset_id);
       return '<tr><td>'+safe(new Date(item.occurred_at).toLocaleString('ro-RO'))+'</td>'+
         '<td>'+safe(tv?.name||'TV dezactivat')+'</td>'+
         '<td>'+safe(item.event_type)+'</td><td>'+safe(asset?.title||'—')+'</td>'+
-        '<td>'+safe(item.playback_state||'—')+'</td></tr>';
+        '<td>'+safe(item.playback_state||'—')+'</td><td>'+safe(item.event_type==='error'?item.error_message||'Eroare nespecificată':'—')+'</td></tr>';
     }).join('');
     return heading('MONITORIZARE','Diagnostic și jurnal TV',
       'Ultimele materiale transmise, erori și televizoare fără heartbeat. Un TV fără răspuns poate fi oprit, fără internet sau poate avea aplicația închisă.')+
       '<section class="panel"><div class="panel-head"><h2>Stare dispozitive</h2></div>'+
       '<div class="diagnostic-screens">'+rows+'</div></section>'+
-      '<section class="panel"><div class="panel-head"><h2>Jurnalul ultimelor 120 de evenimente</h2><span>90 ZILE RETENȚIE</span></div>'+
-      (history?'<div class="diagnostic-table-wrap"><table class="diagnostic-table"><thead><tr><th>Data</th><th>TV</th><th>Eveniment</th><th>Material</th><th>Stare</th></tr></thead><tbody>'+history+'</tbody></table></div>':
+      '<section class="panel"><div class="panel-head"><h2>Jurnal TV · '+historyRows.length+' evenimente utile</h2><span>90 ZILE RETENȚIE</span></div>'+
+      (history?'<div class="diagnostic-table-wrap"><table class="diagnostic-table"><thead><tr><th>Data</th><th>TV</th><th>Eveniment</th><th>Material</th><th>Stare</th><th>Detalii / eroare</th></tr></thead><tbody>'+history+'</tbody></table></div>':
         '<p class="tv-empty">Nu avem încă evenimente de redare înregistrate. Apar la următoarea schimbare de material sau stare.</p>')+
       '</section>';
   }
-  function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>POWERED BY #ALTFEL</small></div></div><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
+  function loginView(denied=false){ return `<main class="login-page"><div class="login-illustration"><div class="brand light"><div class="brand-symbol">${icon('play',23)}</div><div><strong>screenflow<span>.</span></strong><small>POWERED BY #ALTFEL</small></div></div><span class="altfel-sticker login-sticker" aria-hidden="true">#altfel</span><div class="hero-decor"><div class="preview-frame"><div class="preview-head"><b></b><span>LIVE PREVIEW</span></div><div class="preview-image"><div class="preview-bubble">ON AIR</div><strong>Conținut care<br>atrage privirile.</strong><span>Difuzat pe fiecare ecran.</span></div><div class="preview-controls"><span></span><span></span><span></span></div></div></div><div class="login-quote">Un singur loc pentru toate reclamele,<br>campaniile și televizoarele tale.</div></div><div class="login-content"><div class="login-box"><p class="kicker">ADMINISTRATOR</p><h1>Bine ai revenit.</h1><p>Intră în panoul de control pentru a gestiona conținutul difuzat în locațiile tale.</p>${state.error?`<div class="alert">${safe(state.error)}</div>`:''}${denied?`<div class="alert">Contul este autentificat, dar nu este autorizat ca administrator. Adaugă utilizatorul în tabelul admin_users, conform README.md.</div><button class="btn subtle" data-action="logout">Schimbă contul</button>`:`<form data-form="login" class="login-form"><label>Adresa de email<input type="email" name="email" placeholder="email@firma.ro" required autocomplete="username"></label><label>Parola<input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"></label><button class="btn primary full" type="submit">Autentificare ${icon('arrow',18)}</button></form>`}<div class="login-footer">Acces securizat · Administrare centralizată · Actualizare automată</div></div></div></main>`; }
   function render(){ if(state.loading){root.innerHTML='<div class="loading-screen"><span class="spinner"></span> Se conectează...</div>';return;} if(!state.session){root.innerHTML=loginView();return;} if(!state.isAdmin){root.innerHTML=loginView(true);return;} root.innerHTML=frame(({overview,assets:assetsView,playlists:playlistsView,audio:audioView,smart:()=>renderSmartModesAdmin({state,heading,pubUrl}),guests:()=>renderGuestAdmin({state,heading}),mirror:()=>renderMirrorAdmin({state,heading}),diagnostics:diagnosticsView,screens:screensView,locations:locationsView})[state.view]?.()||overview()); if(state.view==='guests')hydrateGuestQR(root,state); if(state.view==='mirror')hydrateMirror();}
   async function perform(op,success){state.busy=true;state.error='';render();try{await op();await load();state.busy=false;toast(success||'Modificările au fost salvate.');}catch(e){state.busy=false;showError(e.message);} }
   async function insert(table,record){const {error}=await supabase.from(table).insert(record);if(error)throw error;}
@@ -805,11 +808,10 @@ function startPlayer(){
   }
   document.body.classList.add('tv-body');
   document.title='Screenflow · TV Player';
-  root.innerHTML=`<div class="tv-stage" id="tv-stage"><div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>Se pregătește conținutul...</p></div></div><div class="tv-indicator" id="tv-indicator"></div>`;
+  root.innerHTML=`<div class="tv-stage" id="tv-stage"><div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><span class="altfel-sticker tv-sticker" aria-hidden="true">#altfel</span><div class="tv-line"></div><p>Se pregătește conținutul...</p></div></div><div class="tv-indicator" id="tv-indicator"></div>`;
   const stage=document.getElementById('tv-stage'), indicator=document.getElementById('tv-indicator');
   const posters=createPosterTransitions({stage});
   let current=[], pending=null, index=0, first=true, timer=null, token=0, sync=false, syncAnchor=0, syncOffset=0, signature="", blocked=false, lastReloadCommand=null, videoProblem='';
-  const cacheKey=`screenflow:manifest:${publicId}`;
   let offlinePlayback=false;
   let failedMediaCount=0;
   const upstreamUrl=path=>supabase.storage.from('ads').getPublicUrl(path).data.publicUrl;
@@ -829,7 +831,7 @@ function startPlayer(){
     if(!active){first=true;signature='';current=[];pending=null;index=0;refresh();}
   }});
   let clearPortraitBackdrop=()=>{};
-  const standby=(msg='Conținutul va apărea în curând.')=>{posters.reset();clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
+  const standby=(msg='Conținutul va apărea în curând.')=>{posters.reset();clearPortraitBackdrop();clearPortraitBackdrop=()=>{};audio.mediaChanged('none');stage.innerHTML=`<div class="tv-standby"><div class="tv-logo">screenflow<span>.</span></div><span class="altfel-sticker tv-sticker" aria-hidden="true">#altfel</span><div class="tv-line"></div><p>${safe(msg)}</p></div>`;};
   const duration=a=>Math.max(3000,Math.min(3600000,(Number(a?.duration_seconds)||10)*1000));
   const retryMedia=(my,reason)=>{
     if(my!==token||blocked)return;
@@ -913,6 +915,7 @@ function startPlayer(){
       video.onplaying=()=>{if(my===token){clearBufferWatch();failedMediaCount=0;indicator.textContent='';if(firstVideoFrame){firstVideoFrame=false;const delay=Date.now()-beganAt;videoProblem=delay>2500?'Video: pornire în '+(delay/1000).toFixed(1)+' secunde':'';}else videoProblem='';if(sync)align();}};
       video.onended=()=>{if(my===token){clearBufferWatch();next();}};
       video.onerror=()=>{if(my===token){clearBufferWatch();retryMedia(my,'Video: eroare codec/rețea');}};
+      watchBuffer(); // Detect a blank screen even if the browser never fires waiting/stalled.
       audio.prepareVideo(video).catch(()=>{if(my===token){clearBufferWatch();retryMedia(my,'Redarea video a fost blocată');}});
       timer=setTimeout(()=>{if(my===token)next();},remaining??60*60*1000);
     } else next();
@@ -972,9 +975,6 @@ function startPlayer(){
       first=true;signature='';current=[];pending=null;index=0;
     }
     const items=Array.isArray(data.items)?data.items:[];
-    if(!isOffline){
-      try{localStorage.setItem(cacheKey,JSON.stringify({items,updated:Date.now()}));}catch{}
-    }
     if(!isOffline)indicator.textContent='';
     const newSync=Boolean(data.synchronized&&data.sync_anchor),newAnchor=Date.parse(data.sync_anchor||'');
     const newSignature=JSON.stringify({items,newSync,anchor:data.sync_anchor});
@@ -1033,14 +1033,9 @@ function startPlayer(){
         if(!blocked)indicator.textContent='OFFLINE · Redare din memoria TV';
       }else {
         indicator.textContent='Internet indisponibil · nu avem încă un playlist salvat integral';
-        if(first){
-          try{
-            const older=JSON.parse(localStorage.getItem(cacheKey));
-            if(older?.items?.length){
-              current=older.items;first=false;play();
-            }else standby('Așteptăm conexiunea la internet...');
-          }catch{standby('Așteptăm conexiunea la internet...');}
-        }
+        // A manifest containing URLs is not a complete offline copy.
+        // Do not show network-only media as an offline fallback.
+        if(first)standby('Așteptăm conexiunea la internet...');
       }
     }finally{refreshing=false;}
   }
@@ -1048,7 +1043,7 @@ function startPlayer(){
   async function heartbeat(){
     if(reporting)return;reporting=true;
     try{
-      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':smartModeActive||current.length?'playing':'waiting'),error:videoProblem||offline.currentStatus()});
+      const r=await tvPing(supabase,{asset:current[index]?.id||null,state:document.hidden?'background':(blocked?'waiting':smartModeActive||current.length?'playing':'waiting'),error:playerDiagnosticError(videoProblem,offline.currentStatus())});
       if(r?.status==='pending')location.replace('/connect');
       if(r?.status==='approved' && r.screen_public_id && r.screen_public_id!==publicId)location.replace('/play/'+r.screen_public_id);
     }catch(e){console.warn('TV heartbeat',e?.message)}

@@ -1,7 +1,7 @@
 /* Screenflow offline-first service worker. The TV caches the app shell and the
  * EXACT media URLs fetched by the paired player. No admin session or secrets.
  * Media must be available as a full HTTP 200 response before going offline. */
-const SHELL = 'screenflow-shell-v27-altfel-tv-recovery';
+const SHELL = 'screenflow-shell-v28-altfel-wall-identity';
 const MEDIA = 'screenflow-media-v24';
 const PREFIX = 'screenflow-shell-';
 const ROOT = '/';
@@ -89,7 +89,7 @@ self.addEventListener('fetch', event => {
       const reservation=url.searchParams.get('reservation')||'';
       const base=(venue?'/manage/':'/g/')+slug;
       const start=base+(!venue&&/^[a-f0-9-]{36}$/i.test(reservation)?'?reservation='+reservation:'');
-      event.respondWith(new Response(JSON.stringify({id:base,name:(venue?'Rezervări ':'#altfel ')+slug.replace(/^altfel-/,''),short_name:venue?'Rezervări':'#altfel',start_url:start,scope:'/',display:'standalone',background_color:'#f7f5ee',theme_color:'#234d3e',icons:[{src:'/icon-192.png',sizes:'192x192',type:'image/png',purpose:'any'},{src:'/icon-512.png',sizes:'512x512',type:'image/png',purpose:'any maskable'}]}),{headers:{'Content-Type':'application/manifest+json','Cache-Control':'no-cache'}}));return;
+      event.respondWith(new Response(JSON.stringify({id:base,name:(venue?'Rezervări ':'#altfel ')+slug.replace(/^altfel-/,''),short_name:venue?'Rezervări':'#altfel',start_url:start,scope:'/',display:'standalone',background_color:'#f8efe0',theme_color:'#d56551',icons:[{src:'/icon-192.png',sizes:'192x192',type:'image/png',purpose:'any'},{src:'/icon-512.png',sizes:'512x512',type:'image/png',purpose:'any maskable'}]}),{headers:{'Content-Type':'application/manifest+json','Cache-Control':'no-cache'}}));return;
     }
   }
 
