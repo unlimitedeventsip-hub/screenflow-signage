@@ -69,12 +69,23 @@ export function createAudioPlayback({ stage, indicator, getUrl }) {
     const enabled = Boolean(settings.video_audio_enabled) && volume(settings.video_volume, 35) > 0;
     video.muted = !enabled;
     video.volume = volume(settings.video_volume, 35);
-    return video.play().then(function () { if (enabled) hideUnlock(); }).catch(function (err) {
+    // Legacy Tizen/Android WebViews may return undefined from play().
+    // Never let that crash the entire signage player.
+    let request;
+    try { request = video.play(); }
+    catch (err) { return Promise.reject(err); }
+    if (!request || typeof request.then !== 'function') return Promise.resolve();
+    return request.then(function () { if (enabled) hideUnlock(); }).catch(function (err) {
       if (!enabled) throw err;
-      // Browsers may forbid autoplay with sound. Keep the ad running silently
-      // and offer a one-key gesture to enable audio, rather than skipping it.
+      // Browsers may forbid autoplay with sound. Retry silently and leave
+      // audio unlock to a real remote-control gesture.
       video.muted = true;
-      return video.play().then(showUnlock);
+      const silent = video.play();
+      if (!silent || typeof silent.then !== 'function') {
+        showUnlock();
+        return;
+      }
+      return silent.then(showUnlock);
     });
   }
   function mediaChanged(kind) {
