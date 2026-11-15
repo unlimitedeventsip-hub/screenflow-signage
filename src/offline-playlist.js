@@ -11,7 +11,7 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   let status='Pregătire offline…';
   const setStatus=s=>{if(s!==status){status=s;onStatus(s);}};
   const supported=typeof caches!=='undefined'&&typeof fetch==='function';
-  const hasWorker='serviceWorker' in navigator;
+  const hasWorker=typeof navigator!=='undefined' && 'serviceWorker' in navigator;
   let blobUrls=new Map();
   const mediaPaths=manifest=>{
     const paths=[];
@@ -74,7 +74,10 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   function mediaUrl(path,forceLocal=false) {
     const upstream=validUrl(path);
     if(forceLocal&&blobUrls.has(upstream))return blobUrls.get(upstream);
-    if(supported&&hasWorker&&navigator.serviceWorker.controller&&readyPaths.has(upstream)){
+    // Online playback must use the upstream URL. The service worker already
+    // serves cached public media when available; the proxy is offline-only.
+    // Otherwise evicted CacheStorage entries cause a 404 even while online.
+    if(forceLocal&&supported&&hasWorker&&navigator.serviceWorker.controller&&readyPaths.has(upstream)){
       return '/offline-media?src='+encodeURIComponent(upstream);
     }
     return upstream;
@@ -139,26 +142,51 @@ export function createOfflinePlaylist({publicId,getUrl,onStatus=()=>{}}) {
   }
   async function prepareOfflineMedia(manifest){
     if(!supported)return false;
-    if(hasWorker&&navigator.serviceWorker.controller)return true;
     const paths=mediaPaths(manifest);
-    // Clear previous object URLs before creating a new offline session.
+    const controlled=hasWorker&&Boolean(navigator.serviceWorker.controller);
+    // A stored manifest alone does not prove media survived WebView's quota
+    // eviction. Check ALL referenced cache entries before switching offline.
     for(const url of blobUrls.values())URL.revokeObjectURL(url);
     blobUrls=new Map();
-    const cache=await caches.open(MEDIA_CACHE);
-    for(const path of paths){
-      const upstream=validUrl(path);
-      const hit=await cache.match(upstream);
-      if(!hit||hit.status!==200){
-        for(const url of blobUrls.values())URL.revokeObjectURL(url);
-        blobUrls=new Map();
-        return false;
+    const clearLocal=()=>{
+      for(const url of blobUrls.values())URL.revokeObjectURL(url);
+      blobUrls=new Map();
+    };
+    try{
+      const cache=await caches.open(MEDIA_CACHE);
+      for(const path of paths){
+        const upstream=validUrl(path);
+        const hit=await cache.match(upstream);
+        if(!hit||hit.status!==200){
+          clearLocal();
+          setStatus('Offline indisponibil: fișierul lipsește din memoria TV');
+          return false;
+        }
+        // A zero-byte cached response cannot be used, even if its status=200.
+        // Avoid loading complete videos into RAM when the header is valid.
+        const declared=Number(hit.headers.get('content-length')||0);
+        if(!Number.isFinite(declared)||declared<0){
+          clearLocal();return false;
+        }
+        if(controlled){
+          if(declared===0 && (await hit.clone().blob()).size===0){
+            clearLocal();return false;
+          }
+        }else{
+          // Only browsers without a service-worker controller need blob URLs.
+          const blob=await hit.blob();
+          if(!blob.size){clearLocal();return false;}
+          blobUrls.set(upstream,URL.createObjectURL(blob));
+        }
       }
-      const blob=await hit.blob();
-      if(!blob.size)return false;
-      blobUrls.set(upstream,URL.createObjectURL(blob));
+      readyPaths=new Set(paths.map(validUrl));
+      setStatus('OFFLINE · '+paths.length+' fișiere locale pregătite');
+      return true;
+    }catch(e){
+      clearLocal();
+      setStatus('Offline indisponibil: '+String(e?.message||'eroare').slice(0,55));
+      return false;
     }
-    setStatus('OFFLINE · '+paths.length+' fișiere locale pregătite');
-    return true;
   }
   async function localBlob(path) {
     if(!supported)return null;
